@@ -10,13 +10,12 @@ import "time"
 const SchemaVersion = 1
 
 // Attribution is displayed wherever snapshot data is shown. Artificial Analysis
-// requires attribution for use of their leaderboard data.
-const Attribution = "Quality data: Artificial Analysis Coding Agent Index " +
-	"(https://artificialanalysis.ai/agents/coding-agents). " +
-	"Pricing: models.dev / OpenRouter."
+// requires attribution for use of their data, across all API tiers.
+const Attribution = "Quality & pricing data: Artificial Analysis " +
+	"(https://artificialanalysis.ai). Used under their terms; attribution required."
 
 // Snapshot is the full, validated set of routing candidates plus provenance.
-// Candidates are sorted by CostPerTaskUSD ascending.
+// Candidates are sorted by BlendedPricePer1M ascending (the cost axis).
 type Snapshot struct {
 	SchemaVersion int          `json:"schemaVersion"`
 	FetchedAt     time.Time    `json:"fetchedAt"`
@@ -26,53 +25,47 @@ type Snapshot struct {
 	Dropped       []DroppedRow `json:"dropped,omitempty"`
 }
 
-// SourceMeta records where a snapshot's data came from, for transparency and
-// staleness reasoning.
+// SourceMeta records which benchmark provider produced this snapshot and how
+// many raw models it returned before filtering to candidates.
 type SourceMeta struct {
-	AAURL         string `json:"aaUrl"`
-	AARowCount    int    `json:"aaRowCount"`    // raw rows before collapse
-	PricingSource string `json:"pricingSource"` // "models.dev" | "openrouter" | "mixed"
+	Provider   string `json:"provider"`   // e.g. "artificial-analysis"
+	ModelCount int    `json:"modelCount"` // raw models from the provider, before filtering
 }
 
-// Candidate is one routable model: an AA leaderboard row collapsed to its best
-// harness/effort, mapped to an OpenRouter ID, with token-weighted pricing.
+// Candidate is one routable model: a benchmark record with a coding-quality
+// score and the per-token prices used to rank cost. Keyed by Slug.
 type Candidate struct {
-	AASlug       string `json:"aaSlug"`       // hostModelSlug of the kept row
-	OpenRouterID string `json:"openrouterId"` // e.g. "anthropic/claude-opus-4.8"
-	DisplayLabel string `json:"displayLabel"` // kept row's label (harness + effort)
-	Agent        string `json:"agent"`        // harness name of the kept row
-	Effort       string `json:"effort,omitempty"`
+	Slug         string `json:"slug"`                   // provider-native id (the stable key)
+	OpenRouterID string `json:"openrouterId,omitempty"` // "" until mapped (M3 routing concern)
+	Name         string `json:"name"`
+	Creator      string `json:"creator,omitempty"`
+	ReleaseDate  string `json:"releaseDate,omitempty"`
 
-	Quality        float64  `json:"quality"` // raw AA indexScore, 0–1
-	TokenMix       TokenMix `json:"tokenMix"`
-	Prices         Prices   `json:"prices"` // USD per 1M tokens
-	CostPerTaskUSD float64  `json:"costPerTaskUsd"`
-	AAMeanCostUSD  float64  `json:"aaMeanCostUsd"` // AA's observed mean cost, for sanity/display
+	// Quality signals on the Artificial Analysis 0–100 scale. Quality (the coding
+	// index) drives the knob; the others are stored for future use.
+	Quality           float64 `json:"quality"` // coding index
+	AgenticIndex      float64 `json:"agenticIndex,omitempty"`
+	IntelligenceIndex float64 `json:"intelligenceIndex,omitempty"`
 
-	CacheReadEstimated bool `json:"cacheReadEstimated,omitempty"` // 0.1× heuristic used
-	ContextWindow      int  `json:"contextWindow,omitempty"`      // seam for M2 constraints
+	// Pricing, USD per 1M tokens.
+	InputPricePer1M    float64 `json:"inputPricePer1m"`
+	OutputPricePer1M   float64 `json:"outputPricePer1m"`
+	CacheHitPricePer1M float64 `json:"cacheHitPricePer1m,omitempty"`
+
+	// BlendedPricePer1M = (3·input + output)/4 — the V1 cost axis. The engine
+	// picks the candidate with the lowest BlendedPricePer1M at or above the floor.
+	BlendedPricePer1M float64 `json:"blendedPricePer1m"`
+
+	// EvalTotalCostUSD is the provider's measured benchmark cost — informational
+	// in V1, the seed for a future token-weighted cost axis.
+	EvalTotalCostUSD float64 `json:"evalTotalCostUsd,omitempty"`
+
+	Provider string `json:"provider"` // benchmark provider that supplied this candidate
 }
 
-// TokenMix is AA's observed per-task mean token usage. MeanInputTokens includes
-// the cached portion (MeanCacheTokens).
-type TokenMix struct {
-	MeanInputTokens  float64 `json:"meanInputTokens"`
-	MeanOutputTokens float64 `json:"meanOutputTokens"`
-	MeanCacheTokens  float64 `json:"meanCacheTokens"`
-	CacheHitRate     float64 `json:"cacheHitRate"`
-}
-
-// Prices are per-1M-token prices for a model on OpenRouter.
-type Prices struct {
-	InputPer1M     float64 `json:"inputPer1m"`
-	OutputPer1M    float64 `json:"outputPer1m"`
-	CacheReadPer1M float64 `json:"cacheReadPer1m"`
-	Source         string  `json:"source"` // "models.dev" | "openrouter"
-}
-
-// DroppedRow records an AA model that did not become a candidate, with the
-// reason — for transparency and to surface alias-table gaps.
+// DroppedRow records a provider model that did not become a candidate, with the
+// reason — for transparency and to surface data gaps.
 type DroppedRow struct {
-	AASlug string `json:"aaSlug"`
-	Reason string `json:"reason"` // "not-on-openrouter" | "duplicate-of:<slug>" | "unmapped" | "no-price"
+	Slug   string `json:"slug"`
+	Reason string `json:"reason"`
 }

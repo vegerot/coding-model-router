@@ -1,0 +1,221 @@
+package refresh_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"path/filepath"
+	"sort"
+	"testing"
+	"time"
+
+	"github.com/vegerot/coding-model-router/internal/provider"
+	"github.com/vegerot/coding-model-router/internal/refresh"
+	"github.com/vegerot/coding-model-router/internal/snapshot"
+)
+
+func ptr(f float64) *float64 { return &f }
+
+// validModel is a fully-populated provider.Model that survives Build's filter.
+func validModel(slug string, coding, in, out float64) provider.Model {
+	return provider.Model{
+		Slug: slug, Name: slug, Creator: "Test",
+		CodingIndex: ptr(coding), AgenticIndex: ptr(coding + 1), IntelligenceIndex: ptr(coding + 2),
+		InputPricePer1M: ptr(in), OutputPricePer1M: ptr(out),
+		CacheHitPricePer1M: ptr(in / 10), EvalTotalCostUSD: ptr(in * 100),
+	}
+}
+
+// manyValid returns n valid models with spread-out quality and price.
+func manyValid(n int) []provider.Model {
+	out := make([]provider.Model, n)
+	for i := range out {
+		out[i] = validModel(fmt.Sprintf("m-%02d", i), 20+float64(i), 1+float64(i), 4+float64(i))
+	}
+	return out
+}
+
+const fixedTime = "2026-06-09T12:00:00Z"
+
+func at() time.Time { t, _ := time.Parse(time.RFC3339, fixedTime); return t }
+
+func TestBuildFiltersAndComputes(t *testing.T) {
+	models := []provider.Model{
+		validModel("good", 50, 4, 16), // blended = (3*4+16)/4 = 7
+		{Slug: "no-coding", Name: "no-coding", InputPricePer1M: ptr(1), OutputPricePer1M: ptr(2)},
+		{Slug: "no-price", Name: "no-price", CodingIndex: ptr(40)},
+	}
+	s := refresh.Build(models, "artificial-analysis", at())
+
+	if len(s.Candidates) != 1 {
+		t.Fatalf("expected 1 candidate, got %d", len(s.Candidates))
+	}
+	c := s.Candidates[0]
+	if c.Slug != "good" {
+		t.Errorf("kept wrong candidate: %s", c.Slug)
+	}
+	if c.BlendedPricePer1M != 7 {
+		t.Errorf("blended price = %v, want 7", c.BlendedPricePer1M)
+	}
+	if c.AgenticIndex != 51 || c.IntelligenceIndex != 52 || c.EvalTotalCostUSD != 400 {
+		t.Errorf("optional fields not carried: %+v", c)
+	}
+	if c.Provider != "artificial-analysis" {
+		t.Errorf("provider = %q", c.Provider)
+	}
+	if s.Sources.ModelCount != 3 || s.Sources.Provider != "artificial-analysis" {
+		t.Errorf("sources wrong: %+v", s.Sources)
+	}
+	if len(s.Dropped) != 2 {
+		t.Fatalf("expected 2 dropped, got %d (%+v)", len(s.Dropped), s.Dropped)
+	}
+	// Each drop must name a reason.
+	for _, d := range s.Dropped {
+		if d.Reason == "" {
+			t.Errorf("dropped %s has no reason", d.Slug)
+		}
+	}
+	if !s.FetchedAt.Equal(at()) || s.SchemaVersion != snapshot.SchemaVersion {
+		t.Errorf("metadata wrong: fetchedAt=%v schema=%d", s.FetchedAt, s.SchemaVersion)
+	}
+}
+
+func TestBuildSortsByBlendedPriceAscending(t *testing.T) {
+	models := []provider.Model{
+		validModel("pricey", 60, 20, 40), // blended 25
+		validModel("cheap", 30, 0, 4),    // blended 1
+		validModel("mid", 45, 4, 16),     // blended 7
+	}
+	s := refresh.Build(models, "p", at())
+	got := make([]float64, len(s.Candidates))
+	for i, c := range s.Candidates {
+		got[i] = c.BlendedPricePer1M
+	}
+	if !sort.Float64sAreSorted(got) {
+		t.Errorf("candidates not sorted ascending by blended price: %v", got)
+	}
+	if s.Candidates[0].Slug != "cheap" {
+		t.Errorf("cheapest first expected 'cheap', got %q", s.Candidates[0].Slug)
+	}
+}
+
+func TestValidate(t *testing.T) {
+	t.Run("healthy snapshot passes", func(t *testing.T) {
+		s := refresh.Build(manyValid(60), "p", at())
+		if err := refresh.Validate(s); err != nil {
+			t.Errorf("expected healthy snapshot to pass, got %v", err)
+		}
+	})
+	t.Run("too few candidates fails (enough raw, most dropped)", func(t *testing.T) {
+		// 60 raw models clears the raw-count floor, but only 10 are complete, so
+		// the candidate floor (>=30) is what must fail.
+		models := manyValid(10)
+		for i := 0; i < 50; i++ {
+			models = append(models, provider.Model{Slug: fmt.Sprintf("bad-%02d", i), InputPricePer1M: ptr(1), OutputPricePer1M: ptr(2)})
+		}
+		s := refresh.Build(models, "p", at())
+		if s.Sources.ModelCount != 60 {
+			t.Fatalf("setup: ModelCount = %d, want 60", s.Sources.ModelCount)
+		}
+		if err := refresh.Validate(s); err == nil {
+			t.Error("expected too-few-candidates failure, got nil")
+		}
+	})
+	t.Run("quality scale guard fails when all scores tiny", func(t *testing.T) {
+		models := make([]provider.Model, 60)
+		for i := range models {
+			models[i] = validModel(fmt.Sprintf("t-%02d", i), 0.3, 1+float64(i), 4) // max coding 0.3
+		}
+		s := refresh.Build(models, "p", at())
+		if err := refresh.Validate(s); err == nil {
+			t.Error("expected quality-scale-guard failure (max coding < 20), got nil")
+		}
+	})
+}
+
+func TestRefreshHappyPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "snapshot.json")
+	prov := &stubProvider{name: "artificial-analysis", models: manyValid(60)}
+
+	s, stale, err := refresh.Refresh(context.Background(), refresh.Options{
+		Provider: prov, CachePath: path, Now: at, Stderr: io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if stale {
+		t.Error("fresh refresh should not be stale")
+	}
+	if len(s.Candidates) != 60 {
+		t.Errorf("expected 60 candidates, got %d", len(s.Candidates))
+	}
+	// Cache was written and reloads.
+	if _, err := snapshot.Load(path); err != nil {
+		t.Errorf("expected cache written, Load failed: %v", err)
+	}
+}
+
+func TestRefreshFallsBackToLastGood(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "snapshot.json")
+
+	// Seed a good cache.
+	ok := &stubProvider{name: "p", models: manyValid(60)}
+	if _, _, err := refresh.Refresh(context.Background(), refresh.Options{
+		Provider: ok, CachePath: path, Now: at, Stderr: io.Discard,
+	}); err != nil {
+		t.Fatalf("seed Refresh: %v", err)
+	}
+
+	// Now the provider errors: Refresh should return the last-good snapshot, stale.
+	boom := &stubProvider{name: "p", err: errors.New("network down")}
+	s, stale, err := refresh.Refresh(context.Background(), refresh.Options{
+		Provider: boom, CachePath: path, Now: at, Stderr: io.Discard,
+	})
+	if err == nil {
+		t.Error("expected the causal error to be returned alongside last-good")
+	}
+	if !stale {
+		t.Error("expected stale=true when serving last-good")
+	}
+	if s == nil || len(s.Candidates) != 60 {
+		t.Errorf("expected last-good snapshot with 60 candidates, got %+v", s)
+	}
+}
+
+func TestRefreshNoCacheNoData(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "absent.json")
+	boom := &stubProvider{name: "p", err: errors.New("network down")}
+	s, stale, err := refresh.Refresh(context.Background(), refresh.Options{
+		Provider: boom, CachePath: path, Now: at, Stderr: io.Discard,
+	})
+	if err == nil {
+		t.Error("expected error when fetch fails and no cache exists")
+	}
+	if stale {
+		t.Error("stale should be false when there is no last-good to serve")
+	}
+	if s != nil {
+		t.Errorf("expected nil snapshot, got %+v", s)
+	}
+}
+
+// stubProvider implements provider.Provider for Refresh tests.
+type stubProvider struct {
+	name   string
+	models []provider.Model
+	err    error
+}
+
+func (s *stubProvider) Name() string { return s.name }
+
+func (s *stubProvider) Fetch(context.Context, *http.Client) ([]provider.Model, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.models, nil
+}

@@ -1,4 +1,4 @@
-package snapshot
+package snapshot_test
 
 import (
 	"math"
@@ -6,65 +6,66 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
 
-func cand(id string, q float64) Candidate {
-	return Candidate{OpenRouterID: id, Quality: q}
+func cand(slug string, quality, blended float64) snapshot.Candidate {
+	return snapshot.Candidate{Slug: slug, Quality: quality, BlendedPricePer1M: blended}
 }
 
 func TestNormalizedQuality(t *testing.T) {
-	t.Run("min-max over a set", func(t *testing.T) {
-		got := NormalizedQuality([]Candidate{
-			cand("low", 0.40),
-			cand("mid", 0.60),
-			cand("high", 0.80),
+	t.Run("min-max over a set, keyed by slug", func(t *testing.T) {
+		got := snapshot.NormalizedQuality([]snapshot.Candidate{
+			cand("low", 40, 1),
+			cand("mid", 60, 1),
+			cand("high", 80, 1),
 		})
 		want := map[string]float64{"low": 0.0, "mid": 0.5, "high": 1.0}
-		for id, w := range want {
-			if math.Abs(got[id]-w) > 1e-9 {
-				t.Errorf("%s: got %v, want %v", id, got[id], w)
+		for slug, w := range want {
+			if math.Abs(got[slug]-w) > 1e-9 {
+				t.Errorf("%s: got %v, want %v", slug, got[slug], w)
 			}
 		}
 	})
 
 	t.Run("single candidate normalizes to 1.0", func(t *testing.T) {
-		got := NormalizedQuality([]Candidate{cand("solo", 0.42)})
+		got := snapshot.NormalizedQuality([]snapshot.Candidate{cand("solo", 42, 1)})
 		if got["solo"] != 1.0 {
 			t.Errorf("single candidate: got %v, want 1.0", got["solo"])
 		}
 	})
 
 	t.Run("all-equal qualities map to 1.0", func(t *testing.T) {
-		got := NormalizedQuality([]Candidate{cand("a", 0.5), cand("b", 0.5)})
+		got := snapshot.NormalizedQuality([]snapshot.Candidate{cand("a", 50, 1), cand("b", 50, 2)})
 		if got["a"] != 1.0 || got["b"] != 1.0 {
 			t.Errorf("equal qualities: got %v, want all 1.0", got)
 		}
 	})
 
 	t.Run("empty set yields empty map", func(t *testing.T) {
-		if got := NormalizedQuality(nil); len(got) != 0 {
+		if got := snapshot.NormalizedQuality(nil); len(got) != 0 {
 			t.Errorf("empty set: got %v, want empty", got)
 		}
 	})
 }
 
-func sampleSnapshot() *Snapshot {
-	return &Snapshot{
-		SchemaVersion: SchemaVersion,
+func sampleSnapshot() *snapshot.Snapshot {
+	return &snapshot.Snapshot{
+		SchemaVersion: snapshot.SchemaVersion,
 		FetchedAt:     time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC),
-		Attribution:   Attribution,
-		Sources:       SourceMeta{AAURL: "https://artificialanalysis.ai/agents/coding-agents", AARowCount: 21, PricingSource: "models.dev"},
-		Candidates: []Candidate{
+		Attribution:   snapshot.Attribution,
+		Sources:       snapshot.SourceMeta{Provider: "artificial-analysis", ModelCount: 500},
+		Candidates: []snapshot.Candidate{
 			{
-				AASlug: "deepseek_deepseek-v4-pro-1m", OpenRouterID: "deepseek/deepseek-v4-pro",
-				DisplayLabel: "Claude Code - DeepSeek V4 Pro (high)", Agent: "Claude Code", Effort: "high",
-				Quality:        0.501,
-				TokenMix:       TokenMix{MeanInputTokens: 3449322, MeanOutputTokens: 29998, MeanCacheTokens: 2722770, CacheHitRate: 0.798},
-				Prices:         Prices{InputPer1M: 0.435, OutputPer1M: 0.87, CacheReadPer1M: 0.003625, Source: "models.dev"},
-				CostPerTaskUSD: 0.352, AAMeanCostUSD: 0.352, ContextWindow: 1048576,
+				Slug: "gpt-5-5", OpenRouterID: "", Name: "GPT-5.5 (xhigh)", Creator: "OpenAI",
+				ReleaseDate: "2026-04-23",
+				Quality:     59.1, AgenticIndex: 74.1, IntelligenceIndex: 60.2,
+				InputPricePer1M: 5, OutputPricePer1M: 30, CacheHitPricePer1M: 0.5,
+				BlendedPricePer1M: 11.25, EvalTotalCostUSD: 3357, Provider: "artificial-analysis",
 			},
 		},
-		Dropped: []DroppedRow{{AASlug: "cursor_composer-2", Reason: "not-on-openrouter"}},
+		Dropped: []snapshot.DroppedRow{{Slug: "edge-no-coding", Reason: "missing coding index"}},
 	}
 }
 
@@ -73,18 +74,20 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(dir, "nested", "snapshot.json")
 	orig := sampleSnapshot()
 
-	if err := Save(path, orig); err != nil {
+	if err := snapshot.Save(path, orig); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	got, err := Load(path)
+	got, err := snapshot.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if got.SchemaVersion != orig.SchemaVersion ||
 		!got.FetchedAt.Equal(orig.FetchedAt) ||
+		got.Sources.Provider != "artificial-analysis" ||
 		len(got.Candidates) != 1 ||
-		got.Candidates[0].OpenRouterID != "deepseek/deepseek-v4-pro" ||
-		math.Abs(got.Candidates[0].CostPerTaskUSD-0.352) > 1e-9 ||
+		got.Candidates[0].Slug != "gpt-5-5" ||
+		math.Abs(got.Candidates[0].BlendedPricePer1M-11.25) > 1e-9 ||
+		math.Abs(got.Candidates[0].Quality-59.1) > 1e-9 ||
 		len(got.Dropped) != 1 {
 		t.Errorf("round-trip mismatch: got %+v", got)
 	}
@@ -93,7 +96,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 func TestSaveIsAtomicNoTmpResidue(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "snapshot.json")
-	if err := Save(path, sampleSnapshot()); err != nil {
+	if err := snapshot.Save(path, sampleSnapshot()); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	entries, err := os.ReadDir(dir)
@@ -114,17 +117,17 @@ func TestLoadRejectsSchemaMismatch(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "snapshot.json")
 	s := sampleSnapshot()
-	s.SchemaVersion = SchemaVersion + 99
-	if err := Save(path, s); err != nil {
+	s.SchemaVersion = snapshot.SchemaVersion + 99
+	if err := snapshot.Save(path, s); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if _, err := Load(path); err == nil {
+	if _, err := snapshot.Load(path); err == nil {
 		t.Error("expected Load to reject a schema-version mismatch, got nil")
 	}
 }
 
 func TestLoadMissingFile(t *testing.T) {
-	if _, err := Load(filepath.Join(t.TempDir(), "absent.json")); err == nil {
+	if _, err := snapshot.Load(filepath.Join(t.TempDir(), "absent.json")); err == nil {
 		t.Error("expected error loading a missing file, got nil")
 	}
 }
