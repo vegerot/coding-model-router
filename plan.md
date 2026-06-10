@@ -168,8 +168,20 @@ proxy moves to M4 and later.
 
 ## Deferred
 
-Token-weighted cost (the big one) · Aider / SWE-bench providers · adaptive
-`p=auto` · budget governor · calibration · shadow/A-B · speed axis · capability
-filters (including future context-window minimums from AA Pro or models.dev) ·
-tunable cost weighting · user-local OpenRouter alias overrides such as
-`~/.config/coding-model-router/openrouter-aliases.json`.
+- essential
+  * Things requiring AA Pro API
+    + Token-weighted cost (the big one)
+    + Using AA Pro's `openrouter_api_id` for M3 mapping instead of scraping the OpenRouter catalog (very important)
+    + filters (including future context-window minimums from AA Pro or models.dev)
+  * speed axis
+  * user-local OpenRouter alias overrides such as `~/.config/coding-model-router/openrouter-aliases.json`.
+- great
+  * Aider / SWE-bench providers
+  * capability
+  * can filter models by input/output types (e.g. image input)
+- why not?
+  * adaptive `p=auto`
+  * budget governor
+  * calibration
+  * shadow/A-B
+  * tunable cost weighting
