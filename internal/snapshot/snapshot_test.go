@@ -58,9 +58,9 @@ func sampleSnapshot() *Snapshot {
 			{
 				AASlug: "deepseek_deepseek-v4-pro-1m", OpenRouterID: "deepseek/deepseek-v4-pro",
 				DisplayLabel: "Claude Code - DeepSeek V4 Pro (high)", Agent: "Claude Code", Effort: "high",
-				Quality:  0.501,
-				TokenMix: TokenMix{MeanInputTokens: 3449322, MeanOutputTokens: 29998, MeanCacheTokens: 2722770, CacheHitRate: 0.798},
-				Prices:   Prices{InputPer1M: 0.435, OutputPer1M: 0.87, CacheReadPer1M: 0.003625, Source: "models.dev"},
+				Quality:        0.501,
+				TokenMix:       TokenMix{MeanInputTokens: 3449322, MeanOutputTokens: 29998, MeanCacheTokens: 2722770, CacheHitRate: 0.798},
+				Prices:         Prices{InputPer1M: 0.435, OutputPer1M: 0.87, CacheReadPer1M: 0.003625, Source: "models.dev"},
 				CostPerTaskUSD: 0.352, AAMeanCostUSD: 0.352, ContextWindow: 1048576,
 			},
 		},

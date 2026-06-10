@@ -1,0 +1,81 @@
+{
+  "tier": "free",
+  "intelligence_index_version": 4,
+  "pagination": {
+    "page": 1,
+    "page_size": 3,
+    "total_pages": 2,
+    "has_more": true
+  },
+  "data": [
+    {
+      "id": "1f054429-397e-4fdb-9e71-67bc92c1735e",
+      "name": "GPT-5.5 (xhigh)",
+      "slug": "gpt-5-5",
+      "release_date": "2026-04-23",
+      "model_creator": {
+        "name": "OpenAI"
+      },
+      "evaluations": {
+        "artificial_analysis_intelligence_index": 60.2,
+        "artificial_analysis_coding_index": 59.1,
+        "artificial_analysis_agentic_index": 74.1
+      },
+      "artificial_analysis_intelligence_index_cost": {
+        "total_cost": 3357
+      },
+      "pricing": {
+        "price_1m_input_tokens": 5,
+        "price_1m_output_tokens": 30,
+        "price_1m_cache_hit_tokens": 0.5,
+        "price_1m_cache_write_tokens": null
+      }
+    },
+    {
+      "id": "4386585e-71b4-4a0c-8a63-afb333419cd6",
+      "name": "Claude Opus 4.6 (Non-reasoning, High Effort)",
+      "slug": "claude-opus-4-6",
+      "release_date": "2026-02-05",
+      "model_creator": {
+        "name": "Anthropic"
+      },
+      "evaluations": {
+        "artificial_analysis_intelligence_index": 46.5,
+        "artificial_analysis_coding_index": 47.6,
+        "artificial_analysis_agentic_index": 64.2
+      },
+      "artificial_analysis_intelligence_index_cost": {
+        "total_cost": 1745.71
+      },
+      "pricing": {
+        "price_1m_input_tokens": 6.25,
+        "price_1m_output_tokens": 25,
+        "price_1m_cache_hit_tokens": 0.5,
+        "price_1m_cache_write_tokens": 6.25
+      }
+    },
+    {
+      "id": "edge-1",
+      "name": "Edge No Coding/Price",
+      "slug": "edge-no-coding",
+      "release_date": null,
+      "model_creator": {
+        "name": "Test"
+      },
+      "evaluations": {
+        "artificial_analysis_intelligence_index": 10.0,
+        "artificial_analysis_coding_index": null,
+        "artificial_analysis_agentic_index": null
+      },
+      "artificial_analysis_intelligence_index_cost": {
+        "total_cost": null
+      },
+      "pricing": {
+        "price_1m_input_tokens": null,
+        "price_1m_output_tokens": null,
+        "price_1m_cache_hit_tokens": null,
+        "price_1m_cache_write_tokens": null
+      }
+    }
+  ]
+}

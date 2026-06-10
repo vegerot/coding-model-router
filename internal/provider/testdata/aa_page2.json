@@ -1,0 +1,58 @@
+{
+  "tier": "free",
+  "intelligence_index_version": 4,
+  "pagination": {
+    "page": 2,
+    "page_size": 3,
+    "total_pages": 2,
+    "has_more": false
+  },
+  "data": [
+    {
+      "id": "0de67206-4d36-4d10-b8f6-cf37fa747a03",
+      "name": "Kimi K2.6",
+      "slug": "kimi-k2-6",
+      "release_date": "2026-04-20",
+      "model_creator": {
+        "name": "Kimi"
+      },
+      "evaluations": {
+        "artificial_analysis_intelligence_index": 53.9,
+        "artificial_analysis_coding_index": 47.1,
+        "artificial_analysis_agentic_index": 66
+      },
+      "artificial_analysis_intelligence_index_cost": {
+        "total_cost": 947.87
+      },
+      "pricing": {
+        "price_1m_input_tokens": 0.95,
+        "price_1m_output_tokens": 4,
+        "price_1m_cache_hit_tokens": 0.16,
+        "price_1m_cache_write_tokens": null
+      }
+    },
+    {
+      "id": "00f1248e-78e3-4230-8dc8-5e13ba8645e2",
+      "name": "MiMo-V2.5-Pro",
+      "slug": "mimo-v2-5-pro",
+      "release_date": "2026-04-22",
+      "model_creator": {
+        "name": "Xiaomi"
+      },
+      "evaluations": {
+        "artificial_analysis_intelligence_index": 53.8,
+        "artificial_analysis_coding_index": 45.5,
+        "artificial_analysis_agentic_index": 67.4
+      },
+      "artificial_analysis_intelligence_index_cost": {
+        "total_cost": 160.82
+      },
+      "pricing": {
+        "price_1m_input_tokens": 0.43,
+        "price_1m_output_tokens": 0.87,
+        "price_1m_cache_hit_tokens": 0,
+        "price_1m_cache_write_tokens": null
+      }
+    }
+  ]
+}
