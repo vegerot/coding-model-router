@@ -1,8 +1,8 @@
 // Command router is a Pareto-style coding-model router.
 //
-// It exposes a single quality knob p ∈ [0,1] and, given the Artificial Analysis
-// coding-agents leaderboard plus token-usage-weighted OpenRouter pricing, selects
-// the cheapest model whose normalized quality is at or above p.
+// It exposes a single quality knob p ∈ [0,1] and, given Artificial Analysis's
+// coding index plus per-token pricing, selects the cheapest model whose
+// normalized quality is at or above p.
 //
 // Subcommands:
 //
@@ -11,10 +11,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/vegerot/coding-model-router/internal/cli"
 )
 
 func main() {
@@ -28,7 +29,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	switch args[0] {
 	case "snapshot":
-		return cmdSnapshot(context.Background(), args[1:], stdout, stderr)
+		return cli.Snapshot(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		usage(stdout)
 		return 0
