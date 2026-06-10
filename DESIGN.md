@@ -1,9 +1,9 @@
 # Design — Pareto-Style Coding Model Router
 
 A local, OpenAI-compatible HTTP proxy that routes `/v1/chat/completions` to the
-cheapest OpenRouter model whose quality clears a continuous knob `p ∈ [0, 1]`,
-costed by token-usage-weighted pricing. This document is the durable design of
-record; it supersedes the original scratch `plan.md`.
+cheapest model whose coding quality clears a continuous knob `p ∈ [0, 1]`, where
+quality and cost both come from a pluggable benchmark provider. This document is
+the durable design of record.
 
 ## Goal & differences from OpenRouter's `pareto-code`
 
@@ -12,43 +12,40 @@ three coarse quality tiers. This project improves on it three ways:
 
 1. **Continuous knob, not tiers.** A single parameter `p ∈ [0, 1]`: `p=0` always
    selects the cheapest model, `p=1` the best.
-2. **Full candidate set.** All models on Artificial Analysis's
-   [coding-agents leaderboard](https://artificialanalysis.ai/agents/coding-agents),
-   not a curated subset.
-3. **Token-usage-weighted pricing.** Effective price per model = models.dev
-   OpenRouter per-token prices weighted by AA's observed per-task token mix
-   (input / cached / output), so verbose-but-cheap models are costed honestly.
+2. **Full candidate set** from a benchmark leaderboard, not a curated subset.
+3. **Honest cost.** Cost combines a real measured eval cost (which reflects how
+   many tokens a model actually burns) with the model's per-token list price.
 
 ## Settled design decisions
 
 - **`p` semantics — quality threshold.** `p` is a floor on the min–max-normalized
-  AA Coding Agent Index over the current candidate set. The router picks the
-  **cheapest candidate at or above the floor** by effective $/task. This is
-  automatically Pareto-optimal (anything cheaper with ≥ quality would also
-  qualify). `p=0` → cheapest overall; `p=1` → top-ranked regardless of cost.
-  Tie-break: higher quality, then stable by slug.
+  coding quality score over the current candidate set. The router picks the
+  **cheapest candidate at or above the floor** by composite cost score. This is
+  automatically Pareto-optimal. `p=0` → cheapest overall; `p=1` → top-ranked
+  regardless of cost. Tie-break: higher quality, then stable by slug.
 - **Shape — local OpenAI-compatible proxy.** Serves `/v1/chat/completions`,
   accepts the knob via model name (`pareto@0.7`) and/or header, rewrites the
   model field, forwards to OpenRouter with SSE streaming passthrough.
 - **Stack — Go.** Single static binary, long-running local daemon, stdlib only.
-- **Quality metric — AA Coding Agent Index** (0–1): equal-weight composite of
-  SWE-Bench-Pro-Hard-AA, Terminal-Bench v2, and SWE-Atlas-QnA. The official AA
-  Data API does **not** expose this index or per-task token usage at any tier
-  (its `artificial_analysis_coding_index` is a *different*, LLM-level benchmark),
-  so we scrape the leaderboard page; the AA API is at most an optional sanity
-  check.
-- **Harness rows → one candidate per model.** AA's rows are harness+model pairs
-  (e.g. Opus appears under Claude Code, Cursor CLI, Opencode, and at multiple
-  reasoning-effort levels). Collapse to one candidate per underlying model by
-  keeping the row with the highest index score; that row's token mix prices it.
-  Models not available on OpenRouter are dropped.
-- **Cost model.**
-  `cost/task = (meanInputTokens − meanCacheTokens)·inputPrice
-              + meanCacheTokens·cacheReadPrice
-              + meanOutputTokens·outputPrice`,
-  where per-token price = per-1M price / 1e6. Missing cache-read price → 0.1×
-  input-price heuristic (and the candidate is flagged).
-- **AA attribution is required** wherever their data is displayed.
+- **Data source — Artificial Analysis Data API (free tier), via a pluggable
+  provider interface.** See below. The earlier plan to scrape AA's coding-agents
+  leaderboard page (a Next.js RSC payload) and join models.dev pricing was
+  dropped: it was fragile and unnecessary. The AA Data API returns coding
+  quality, full pricing, and a measured eval cost in clean paginated JSON.
+- **Quality metric — `artificial_analysis_coding_index`** (model-level coding
+  score, 0–100). We route to a *raw* model, so the model-level coding index is
+  the right signal (the harness-aware "Coding Agent Index" is not exposed by the
+  API and conflates harness with model). The agentic and intelligence indices are
+  stored alongside for future use.
+- **Cost axis — a single blended per-token price (V1).** Cost is
+  `BlendedPricePer1M = (3·price_1m_input + 1·price_1m_output) / 4` (AA's standard
+  3:1 blend), taken straight from AA's in-band pricing. V1 deliberately does
+  **not** weight cost by tokens produced — that kept the design to one data
+  source and one number. Because it is a single measure, the engine compares it
+  directly ("cheapest above the quality floor"); no cost normalization is needed.
+  AA's measured eval cost (`artificial_analysis_intelligence_index_cost.total_cost`)
+  is stored as informational only and may drive a token-weighted cost axis later.
+- **AA attribution is required** across all tiers, wherever data is displayed.
 
 ## Architecture
 
@@ -57,15 +54,15 @@ client (aider / Claude Code / curl)
    │  POST /v1/chat/completions  model="pareto@0.7"
    ▼
 ┌─ proxy (Go) ─────────────────────────────────┐
-│ router engine: candidates → effective cost   │
+│ router engine: candidates → composite cost   │
 │   → quality floor(p) → cheapest above floor  │
 │ stickiness: session key → pinned             │
 │   model+provider, TTL ~5 min                 │
 │ fallback: models[] passed to OpenRouter +    │
 │   transport-level retry; Retry-After honored │
 │ data refresher (background, daily):          │
-│   • AA page RSC payload (scores + token mix) │
-│   • models.dev api.json (OpenRouter prices)  │
+│   • BenchmarkProvider.Fetch() → []Model      │
+│     (default: Artificial Analysis Data API)  │
 │   • disk-cached snapshot; stale data is OK   │
 └──────────────┬───────────────────────────────┘
                ▼ forwards with rewritten model
@@ -75,93 +72,96 @@ client (aider / Claude Code / curl)
 ### Package layout
 
 ```
-cmd/router/          CLI: subcommand dispatch + `snapshot` (M1) + `serve` (M3)
-internal/snapshot/   Snapshot/Candidate types, NormalizedQuality, atomic Load/Save
-                     — imports nothing internal; this is the engine seam (M2)
-internal/aa/         AA page fetch + RSC flight decode + row extraction
-internal/pricing/    models.dev parse (primary) + OpenRouter /models (fallback)
-internal/refresh/    alias table, pure Build, validation, Refresh orchestrator
-internal/engine/     (M2) pure Select(snapshot, p, opts) → routing plan
-internal/proxy/      (M3) OpenAI-compatible server, SSE passthrough, stickiness
+cmd/router/            CLI: subcommand dispatch + `snapshot` (M1) + `serve` (M3)
+internal/provider/     BenchmarkProvider interface + provider-agnostic Model record
+internal/provider/aa/  Artificial Analysis Data API provider (default)
+internal/snapshot/     Snapshot/Candidate types, NormalizedQuality + CostScores, store
+internal/refresh/      pure Build (Model→Snapshot), validation, Refresh orchestrator
+internal/engine/       (M2) pure Select(snapshot, p, opts) → routing plan
+internal/proxy/        (M3) OpenAI-compatible server, SSE passthrough, stickiness
 ```
 
-Dependency direction: `refresh → {aa, pricing, snapshot}`; `snapshot` imports
-nothing internal. M2's `engine` imports only `snapshot` (pure, no I/O). M3's
-`proxy` imports `engine` + `refresh`.
+Dependency direction: `refresh → {provider, snapshot}`; `provider/aa` →
+`provider`; `snapshot` imports nothing internal (the engine seam). M2's `engine`
+imports only `snapshot`. M3's `proxy` imports `engine` + `refresh`.
+
+## Pluggable provider interface
+
+```go
+// internal/provider
+type Provider interface {
+    Name() string                                            // e.g. "artificial-analysis"
+    Fetch(ctx context.Context, c *http.Client) ([]Model, error)
+}
+
+// Model is a provider-agnostic benchmark record. Pointers are nil when the
+// provider does not report that field.
+type Model struct {
+    Slug, Name, Creator string
+    ReleaseDate         string
+    CodingIndex         *float64 // quality signal (required to become a candidate)
+    AgenticIndex        *float64
+    IntelligenceIndex   *float64
+    InputPricePer1M     *float64
+    OutputPricePer1M    *float64
+    CacheHitPricePer1M  *float64
+    CacheWritePricePer1M *float64
+    EvalTotalCostUSD    *float64 // measured eval cost
+    OpenRouterID        string   // "" when unknown (AA free tier omits it)
+}
+```
+
+Future providers (Aider polyglot YAML, SWE-bench experiments) implement the same
+interface. Aider is the most likely second provider: its
+`polyglot_leaderboard.yml` carries `pass_rate_2` (quality), `total_cost` (USD),
+and `prompt_tokens`/`completion_tokens`, under Apache-2.0.
+
+### Artificial Analysis provider (`internal/provider/aa`)
+
+- Endpoint: `GET https://artificialanalysis.ai/api/v2/language/models/free`,
+  header `x-api-key: $AA_API_KEY`. Paginated (`page` query param, 200/page,
+  ~3 pages ≈ 500 models). Free tier: **25 requests/day** — a refresh costs ~3.
+- Per-model free-tier fields we consume: `slug`, `name`, `model_creator.name`,
+  `release_date`, `evaluations.{artificial_analysis_coding_index,
+  artificial_analysis_agentic_index, artificial_analysis_intelligence_index}`,
+  `pricing.{price_1m_input_tokens, price_1m_output_tokens,
+  price_1m_cache_hit_tokens, price_1m_cache_write_tokens}`,
+  `artificial_analysis_intelligence_index_cost.total_cost`.
+- `openrouter_api_id` is **Pro-tier only** (absent on free). The OpenRouter ID is
+  needed only for *routing* (M3), not for the snapshot; with a free key we map
+  AA slug → OpenRouter ID later (small alias table / fuzzy match), with a Pro key
+  the field is in-band. The snapshot is keyed by AA `slug`.
+- The API key is read from `$AA_API_KEY` (or `--api-key`); it is never logged or
+  committed (`.gitignore`d).
 
 ## Data layer (M1)
 
-### Sources & shapes (verified 2026-06-09)
-
-- **AA leaderboard** — `https://artificialanalysis.ai/agents/coding-agents`,
-  ~595 KB HTML via plain `curl` (no JS). The dataset is a Next.js RSC flight
-  payload spread across ~47 `self.__next_f.push([1,"…"])` script chunks.
-  Decoding: extract each push's JSON string literal in document order,
-  JSON-unescape, concatenate (~317 KB text), locate the single `"rows":[` array,
-  stream-decode it. ~21 rows. Per row we use:
-  `hostModelSlug, displayLabel, agentName, indexScore,
-  mean{inputTokens, outputTokens, cacheTokens, cacheHitRate, costUsd}`.
-  **`hostModelSlug` is not unique** — it repeats across harnesses and
-  reasoning-effort levels (`(max)`/`(medium)`/`(xhigh)` in `displayLabel`); a
-  separate slug (`openai_gpt-5-5-medium`) can denote the same model.
-- **models.dev** — `https://models.dev/api.json`, ~2.2 MB, keyed by provider. The
-  `openrouter` provider has ~339 models keyed by OpenRouter slug, each with
-  `cost{input, output, cache_read, cache_write}` in **USD per 1M tokens
-  (numbers)**. ~45% carry `cache_read`. Eight models carry `cost.tiers` for
-  >200k-context pricing (ignored in v1).
-- **OpenRouter `/api/v1/models`** (fallback price source) — pricing as
-  **per-single-token strings** under `pricing.prompt`/`pricing.completion`
-  (× 1e6 to normalize; `prompt→input`, `completion→output`).
-
-### Alias table (AA slug → OpenRouter ID)
-
-Committed Go map; `""` value = deliberate drop. Most slugs map mechanically
-(`vendor_model-N-M` → `vendor/model.N.M`); the rest are hand-curated:
-
-| AA hostModelSlug | OpenRouter ID | note |
-|---|---|---|
-| anthropic_claude-opus-4-8 | anthropic/claude-opus-4.8 | |
-| anthropic_claude-opus-4-7 | anthropic/claude-opus-4.7 | |
-| anthropic_claude-opus-4-6 | anthropic/claude-opus-4.6 | |
-| anthropic_claude-sonnet-4-6 | anthropic/claude-sonnet-4.6 | |
-| openai_gpt-5-5 | openai/gpt-5.5 | |
-| openai_gpt-5-5-medium | openai/gpt-5.5 | duplicate model; deduped by collapse |
-| openai_gpt-5-4 | openai/gpt-5.4 | |
-| alibaba_cloud_qwen3-7-plus | qwen/qwen3.7-plus | vendor prefix differs |
-| friendliai_glm-5-1 | z-ai/glm-5.1 | AA prefixes hosting provider, not creator |
-| moonshot_kimi-k2-6 | moonshotai/kimi-k2.6 | vendor prefix differs |
-| deepseek_deepseek-v4-pro-1m | deepseek/deepseek-v4-pro | `-1m` = same 1M-context model |
-| google_gemini-3-1-pro_ai-studio | google/gemini-3.1-pro-preview | no GA slug; `_ai-studio` is AA's endpoint qualifier |
-| cursor_composer-2, -2-5, -2-5-fast | *(drop)* | Cursor-only; not on OpenRouter |
-
-Resolution order: exact alias hit → mechanical fallback **verified against the
-price-table keys** → otherwise an `unmapped` drop with a loud stderr warning
-(never a silent guess).
-
 ### Build pipeline (pure)
 
-`Build(rows, prices, fetchedAt) → (Snapshot, warnings, error)`:
-validate rows → resolve aliases → collapse by OpenRouter ID (keep max index
-score; losers recorded as `duplicate-of:…`) → extract effort label
-(`\(([a-z-]+)\)\s*$`) → look up prices (missing cache-read → 0.1× input, flag) →
-compute `CostPerTaskUSD` (clamp uncached ≥ 0) → cross-check vs AA's observed
-`mean.costUsd` → sort ascending by cost.
+`Build(models []provider.Model, fetchedAt) → (Snapshot, warnings, error)`:
+keep models that have a coding index **and** input price **and** output price
+(others → `Dropped` with a reason) → compute
+`BlendedPricePer1M = (3·input + output)/4` → fill `Candidate` → sort by
+`BlendedPricePer1M`. Normalized quality is computed by the `snapshot` helper at
+use time, not stored.
 
-`CostPerTaskUSD` is **stored** in the snapshot (set-independent; CLI, engine, and
-tests then read identical numbers). **Normalized quality is not stored** — it is
-set-dependent, so `snapshot.NormalizedQuality(cands)` recomputes min–max over
-whatever candidate subset the caller selects from.
+`Candidate` (stored): `Slug, OpenRouterID, Name, Creator, ReleaseDate`,
+`Quality` (coding index), `AgenticIndex`, `IntelligenceIndex`,
+`InputPricePer1M`, `OutputPricePer1M`, `CacheHitPricePer1M`,
+`BlendedPricePer1M` (the cost axis), `EvalTotalCostUSD` (informational),
+`Provider`.
+
+`snapshot` helper (pure, set-dependent, keyed by `Slug`):
+- `NormalizedQuality(cands) map[string]float64` — min–max of `Quality`. Cost
+  needs no helper: the engine sorts candidates by `BlendedPricePer1M` directly.
 
 ### Validation rules
 
-- ≥ 15 raw AA rows (21 today) else fail.
-- Per row: non-empty slug/label/agent; `indexScore ∈ (0,1]`;
-  `mean.input/output/costUsd > 0`; `cacheTokens ∈ [0, inputTokens]` else fail.
-- Max index score ≥ 0.3 (guards against a silent quality-scale change) else fail.
-- ≥ 8 surviving candidates (11 today) else fail.
-- Cost cross-check ratio `cost/AAcost` outside [0.5, 2] → warn; outside
-  [0.05, 20] → fail (that's a unit-conversion bug, not market noise).
-- Bad prices on a candidate → drop it + warn (then re-check the ≥8 floor).
+- ≥ 50 raw provider models (sanity; ~500 today) else fail.
+- Per candidate: non-empty slug; `Quality` finite and in a plausible band
+  (0–100); `InputPricePer1M`/`OutputPricePer1M` present and ≥ 0.
+- ≥ 30 surviving candidates (133+ today) else fail.
+- Max coding index ≥ 20 (guards a silent scale/units change) else fail.
 
 ### Snapshot store
 
@@ -171,81 +171,68 @@ Atomic write (`CreateTemp` → write → `Sync` → `Rename`) at
 failure — it returns the last-good snapshot flagged `stale=true` plus the causal
 error.
 
-### Effective frontier (snapshot of 2026-06-09, for reference)
-
-Effective $/task: deepseek 0.35 · qwen 0.50 · gemini-3.1-pro 0.93 · gpt-5.4 1.11
-· sonnet-4.6 1.23 · kimi 1.36 · glm-5.1 1.58 · opus-4.6 2.02 · opus-4.7 4.21 ·
-gpt-5.5 4.33 · opus-4.8 5.49. Pareto frontier (6 of 11 dominated):
-deepseek → qwen → gpt-5.4 → opus-4.7 → opus-4.8. Selection is monotonic in `p`.
-(With today's data, `p > 0.31` resolves to only two models — see "knob spreading"
-in deferred features.)
-
 ## Future milestones (designed; not yet built)
 
 - **M2 — engine.** Pure function importing only `internal/snapshot`:
   `Select(s *snapshot.Snapshot, p float64, opts Options) (Plan, error)`; `Plan`
-  = primary OpenRouter ID + ordered fallbacks (remaining qualifiers by ascending
-  cost). Unit-tested for: cheapest at `p=0`, best at `p=1`, monotonic
-  non-decreasing cost in `p`, dominated models never chosen.
-- **M3 — proxy.** `serve` subcommand. Knob parsing: `pareto@0.7` model name; bare
-  `pareto` → configured default `p`; `X-Pareto-P` header overrides; malformed →
-  400; any other model name → transparent passthrough. SSE passthrough with
-  mid-stream-error chunk inspection; usage extracted from the final chunk.
-  `SnapshotProvider interface{ Current() *snapshot.Snapshot }` seam; background
-  refresher goroutine wraps `refresh.Refresh` (daily; stale-OK with loud warning).
+  = primary + ordered fallbacks (remaining qualifiers by ascending cost score).
+  Unit-tested: cheapest at `p=0`, best at `p=1`, monotonic non-decreasing cost in
+  `p`, dominated models never chosen.
+- **M3 — proxy + OpenRouter mapping.** `serve` subcommand. Knob parsing:
+  `pareto@0.7` model name; bare `pareto` → default `p`; `X-Pareto-P` header
+  overrides; malformed → 400; other model names → transparent passthrough. SSE
+  passthrough with mid-stream-error chunk inspection; usage from the final chunk.
+  This is where AA slug → OpenRouter ID mapping lives (alias table / fuzzy match
+  against OpenRouter `/api/v1/models`, or a Pro key's `openrouter_api_id`).
 - **M4 — resilience + observability.** Stickiness keyed by `X-Session-Id` (else a
-  hash of system prompt + first user message); in-memory store, sliding ~5 min
-  TTL; pins model **and provider**; refreshes apply to new sessions only
-  (hysteresis). Fallback via OpenRouter's `models[]` array + transport-level
-  retry; honor `Retry-After`. Per-request log: chosen model, `p`, effective cost
-  estimate, actual `usage.cost`, fallback hops (from `openrouter_metadata`).
+  hash of system prompt + first user message); in-memory, sliding ~5 min TTL;
+  pins model+provider; refreshes apply to new sessions only. Fallback via
+  OpenRouter `models[]` + transport retry; honor `Retry-After`. Per-request log:
+  chosen model, `p`, cost score, actual `usage.cost`, fallback hops.
 - **M5 — polish.** README usage examples, license.
 
 ## OpenRouter mechanics (verified from docs, for M3/M4)
 
 - **Native fallback** — request param `models: []` (priority order); OpenRouter
-  retries on *any* error (provider down, rate limit, moderation, context
-  overflow) and reports/bills the model that actually served via the response
-  `model` field. Plan: send `model` + `models[]` = the engine's fallback list
-  (cap ~3). Honor `Retry-After` on 429/503.
+  retries on any error and reports/bills the model that served via response
+  `model`. Honor `Retry-After` on 429/503.
 - **Provider pinning** — `provider: {order: ["slug"], allow_fallbacks: false}`;
-  503 if the pinned provider is down → proxy re-routes fresh and re-pins.
-- **Usage** — now automatic in every response (legacy `usage.include` /
-  `stream_options.include_usage` deprecated); arrives in the final SSE chunk
-  before `[DONE]`; cached tokens in `usage.prompt_tokens_details.cached_tokens`;
-  `usage.cost` in credits. Serving provider + per-attempt fallback log via the
-  request header `X-OpenRouter-Metadata: enabled` → `openrouter_metadata` on the
-  final chunk.
-- **Mid-stream errors** — after a 200 + streamed tokens, an error arrives as an
-  SSE chunk with a top-level `error` and `finish_reason: "error"`. Inspect every
-  chunk, not just the HTTP status. Not transparently retryable; surface to the
-  client and log. Error body everywhere: `{"error":{code,message,metadata}}`;
-  502 = provider down, 503 = no provider meets routing requirements.
-- **Auth** — forward a client-supplied `Authorization: Bearer sk-or-…` if
-  present, else inject `OPENROUTER_API_KEY` from env. Send attribution headers
-  `HTTP-Referer` / `X-OpenRouter-Title`.
+  503 if the pinned provider is down → re-route fresh and re-pin.
+- **Usage** — automatic in every response; final SSE chunk before `[DONE]`;
+  cached tokens in `usage.prompt_tokens_details.cached_tokens`; `usage.cost` in
+  credits. Serving provider via `X-OpenRouter-Metadata: enabled`.
+- **Mid-stream errors** — after 200 + tokens, an error arrives as an SSE chunk
+  with top-level `error` and `finish_reason: "error"`. Inspect every chunk.
+- **Auth** — forward client `Authorization: Bearer sk-or-…` if present, else
+  inject `OPENROUTER_API_KEY`. Send `HTTP-Referer` / `X-OpenRouter-Title`.
 
 ## Deferred features
 
-Adaptive `p=auto` via a difficulty classifier · budget governor + cost ledger ·
-personal calibration from task outcomes · shadow / A-B mode · speed axis
-(`:nitro`-style) · capability filters (context window, tool-calling,
-open-weights, data policy) · **(model, reasoning-effort) pairs as distinct
-candidates + forwarding `reasoning.effort`** (AA scores efforts separately;
-`Candidate.Effort` is stored now to enable this) · **knob spreading** via
-rank-interpolated floors (so mid-range `p` spans more than two models) ·
-cache-**write** costs (Anthropic ~1.25× input; currently ignored — biases all
-Anthropic rows equally) · >200k-context tier pricing (`cost.tiers`).
+- **Token-weighted cost (the big one).** V1 ranks cost by a flat blended
+  per-token *price*. Eventually weight cost by how many tokens (or what measured
+  dollar cost) a model actually consumes to run the benchmark — so a model that
+  burns lots of reasoning/output tokens per task is costed honestly, not just by
+  its sticker price. AA already exposes the inputs for this:
+  `artificial_analysis_intelligence_index_cost.total_cost` (a measured USD cost,
+  stored now as `EvalTotalCostUSD`) on the free tier, and
+  `artificial_analysis_intelligence_index_token_counts` (input / output /
+  reasoning token counts) on the Pro tier. The eventual cost axis becomes some
+  blend of price and that measured token burn (caveat: AA's figure is the
+  Intelligence Index workload, not a coding-specific run — a richer provider or
+  the Coding Agent Index would be more faithful).
+- Aider / SWE-bench providers · adaptive `p=auto` via difficulty classifier ·
+  budget governor + cost ledger · personal calibration · shadow / A-B mode ·
+  speed axis (`:nitro`) · capability filters (context window, tool-calling,
+  open-weights, data policy).
 
 ## Risks
 
-- **Scraper fragility** (low–moderate): the RSC payload shape is standard Next.js
-  App Router output; field names change only on a site refactor. Mitigated by the
-  cached last-good snapshot, schema validation on refresh, loud staleness
-  warnings, and `//go:build live` shape-contract tests.
-- **Alias-table staleness = the #1 ongoing maintenance cost.** New AA models with
-  novel slugs become loud `unmapped` warnings rather than silently vanishing; the
-  ≥8-candidate floor is the backstop.
-- **Effort mismatch:** a candidate's quality reflects its *best-scoring* harness +
-  effort row, but the proxy forwards default-effort requests. Documented;
-  effort-forwarding is deferred.
+- **AA API key dependency** — refresh needs a valid `$AA_API_KEY`; free tier is
+  25 req/day. Mitigated by the cached last-good snapshot and stale-OK refresh.
+- **Free-tier field gaps** — some models lack a coding index, pricing, or
+  total_cost; they are dropped (with a reason) and the ≥30-candidate floor is the
+  backstop.
+- **`total_cost` is the Intelligence Index workload**, not coding-specific — the
+  best free proxy for token burn, but not a true coding-task cost.
+- **AA slug → OpenRouter ID mapping** (deferred to M3) is the new ongoing
+  maintenance cost in place of the old scrape's alias table.

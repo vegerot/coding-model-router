@@ -5,6 +5,9 @@
 # Local snapshot cache (when run with --cache pointing into the repo)
 /snapshot.json
 
+# Secrets — never commit the API key
+artificial-analysis-api-key
+
 # Editor / OS cruft
 *.swp
 .DS_Store
