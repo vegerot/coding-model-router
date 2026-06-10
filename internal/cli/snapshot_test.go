@@ -45,7 +45,7 @@ func TestSnapshotPrintsFromCache(t *testing.T) {
 	got := out.String()
 
 	// Header + all candidate slugs present.
-	for _, want := range []string{"MODEL", "QUALITY", "NORM", "cheap-low", "mid", "pricey-top"} {
+	for _, want := range []string{"MODEL", "QUALITY", "NORM", "BLENDED$/1M", "cheap-low", "mid", "pricey-top"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("table missing %q\n---\n%s", want, got)
 		}
@@ -58,9 +58,10 @@ func TestSnapshotPrintsFromCache(t *testing.T) {
 	if !strings.Contains(got, "3 candidates") || !strings.Contains(got, "507") {
 		t.Errorf("summary line wrong\n---\n%s", got)
 	}
-	// Cheapest must be listed before priciest (sorted ascending by cost).
-	if strings.Index(got, "cheap-low") > strings.Index(got, "pricey-top") {
-		t.Errorf("expected cheap-low before pricey-top\n---\n%s", got)
+	// Highest normalized quality must be listed first.
+	if strings.Index(got, "pricey-top") > strings.Index(got, "mid") ||
+		strings.Index(got, "mid") > strings.Index(got, "cheap-low") {
+		t.Errorf("expected pricey-top, then mid, then cheap-low\n---\n%s", got)
 	}
 }
 

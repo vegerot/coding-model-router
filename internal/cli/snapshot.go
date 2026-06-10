@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"text/tabwriter"
 	"time"
 
@@ -106,10 +107,21 @@ func load(path string, doRefresh bool, apiKey string, stderr io.Writer) (s *snap
 
 func renderTable(w io.Writer, s *snapshot.Snapshot) {
 	norm := snapshot.NormalizedQuality(s.Candidates)
+	cands := append([]snapshot.Candidate(nil), s.Candidates...)
+	sort.Slice(cands, func(i, j int) bool {
+		left, right := cands[i], cands[j]
+		if norm[left.Slug] != norm[right.Slug] {
+			return norm[left.Slug] > norm[right.Slug]
+		}
+		if left.BlendedPricePer1M != right.BlendedPricePer1M {
+			return left.BlendedPricePer1M < right.BlendedPricePer1M
+		}
+		return left.Slug < right.Slug
+	})
 
 	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "MODEL\tQUALITY\tNORM\t$/1M\tIN$\tOUT$\tPROVIDER")
-	for _, c := range s.Candidates {
+	fmt.Fprintln(tw, "MODEL\tQUALITY\tNORM\tBLENDED$/1M\tIN$\tOUT$\tPROVIDER")
+	for _, c := range cands {
 		fmt.Fprintf(tw, "%s\t%.1f\t%.2f\t%.4g\t%.4g\t%.4g\t%s\n",
 			c.Slug, c.Quality, norm[c.Slug],
 			c.BlendedPricePer1M, c.InputPricePer1M, c.OutputPricePer1M, c.Provider)
