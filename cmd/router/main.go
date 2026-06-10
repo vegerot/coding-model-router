@@ -9,7 +9,7 @@
 //	router snapshot   build/show the candidate model snapshot (data layer; M1)
 //	router select     choose a model from the cached/refreshed snapshot (M2)
 //	router mappings   resolve candidates to OpenRouter IDs (M3)
-//	router serve      (future, M4) run the OpenAI-compatible proxy
+//	router serve      run the OpenAI-compatible proxy (M4)
 package main
 
 import (
@@ -36,6 +36,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cli.Select(args[1:], stdout, stderr)
 	case "mappings":
 		return cli.Mappings(args[1:], stdout, stderr)
+	case "serve":
+		return cli.Serve(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		usage(stdout)
 		return 0
@@ -58,6 +60,12 @@ Usage:
 
   router mappings [--refresh] [--json] [--cache PATH] [--openrouter-cache PATH]
       Resolve snapshot candidates to OpenRouter model IDs.
+
+  router serve [--addr ADDR] [--p P] [--refresh] [--cache PATH]
+               [--openrouter-cache PATH] [--openrouter-key KEY] [--api-key KEY]
+      Run the OpenAI-compatible proxy. POST /v1/chat/completions with
+      model "pareto" or "pareto@P" (or an X-Pareto-P header) to route to the
+      cheapest mapped model at or above P; other model names pass through.
 
   router help
       Show this help.

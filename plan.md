@@ -41,7 +41,7 @@ pure routing engine, CLI selection, pre-normalization eligibility filtering,
 and dynamic OpenRouter mapping. **Done.** The OpenAI-compatible proxy moves to
 M4 and later.
 
-## ✅ Progress (M0–M3 complete)
+## ✅ Progress (M0–M4 complete)
 
 - [x] **M0 — scaffold.** `go mod`, `cmd/router` subcommand dispatch, Makefile,
   README, DESIGN.md, `.gitignore` (ignores the API key). `go build`/`vet` clean.
@@ -97,6 +97,21 @@ M4 and later.
   The planning experiment found strict deterministic catalog matching resolved
   **141 / 189 candidates (74.6%)**, including all top 20 candidates by AA coding
   quality, while avoiding checked-in alias churn.
+- [x] **M4 — proxy.** New `internal/proxy` package + `router serve` subcommand: a
+  long-running OpenAI-compatible HTTP server. Pure `ParseKnob` (tested first)
+  reads the knob — `pareto` → default `p` (0.67), `pareto@0.7` → 0.7, `X-Pareto-P`
+  header overrides the `@` suffix, malformed `p` → HTTP 400, any other model →
+  transparent passthrough. `ServeHTTP` decodes the `POST /v1/chat/completions`
+  body into a map (preserving all fields), runs `engine.Select` over the mapped
+  snapshot, rewrites `model` to `Primary.OpenRouterID`, and forwards to OpenRouter
+  with a flushing SSE passthrough. Auth: client `Authorization` wins, else inject
+  the key from `--openrouter-key`/`$OPENROUTER_API_KEY`; sends `HTTP-Referer` /
+  `X-Title`. The CLI always resolves to `mapping.MappedSnapshot` first (a primary
+  without an OpenRouter ID cannot be forwarded), so `p` is a floor over the mapped
+  set. `models[]` fallback, stickiness, logging, and mid-stream-error reaction are
+  deferred to M5. Tests: exhaustive `ParseKnob` table + `httptest` handler tests
+  (route/rewrite, cheapest-above-floor, client-auth forwarding, passthrough,
+  malformed→400 with no upstream call, SSE relay, no-qualifier→502).
 
 ## 🧪 Conventions & verification
 
@@ -112,40 +127,13 @@ M4 and later.
   `… snapshot --json | python3 -m json.tool` → valid; `… select --p 0.7`
   prints the selected primary and fallbacks from the cached/refreshed snapshot;
   `… mappings` prints OpenRouter resolution diagnostics; `… select --mapped-only`
-  selects only candidates with resolved OpenRouter IDs.
+  selects only candidates with resolved OpenRouter IDs;
+  `OPENROUTER_API_KEY=… … serve` then `curl -d '{"model":"pareto@0.8",…}'
+  http://127.0.0.1:4000/v1/chat/completions` returns a completion from a real
+  OpenRouter model at or above the floor (`pareto@2` → HTTP 400).
 
 ## Future milestones
 
-- **M4 — proxy (planned, not built).** A new `internal/proxy` package plus a
-  `serve` subcommand that runs a long-running local OpenAI-compatible HTTP
-  server. `proxy` imports `engine`, `mapping`, and `snapshot`; the CLI wiring
-  also uses `refresh`.
-  - **Knob parsing (pure `ParseKnob`, tested first).** `pareto` → default `p`;
-    `pareto@0.7` → `p=0.7`; `X-Pareto-P` header overrides the `@` suffix when the
-    request routes; malformed `p` (non-numeric / outside `[0,1]`) → HTTP 400; any
-    other model name → transparent passthrough (forwarded unchanged).
-  - **Handler (`POST /v1/chat/completions`).** Decode the body into a map to read
-    `model`/`stream` while preserving all other fields, run `engine.Select` over
-    the mapped snapshot, rewrite `model` to `Primary.OpenRouterID`, forward to
-    `https://openrouter.ai/api/v1/chat/completions`, and stream the response back
-    with `http.Flusher` flushing so SSE works live.
-  - **Mapped-only by construction.** The proxy always runs `mapping.Resolve` →
-    `mapping.MappedSnapshot` before selecting, because a primary without an
-    OpenRouter ID cannot be forwarded; `p` is therefore a floor over the *mapped*
-    candidate set (same semantics as `select --mapped-only`).
-  - **Locked decisions.** OpenRouter key from `--openrouter-key` else
-    `$OPENROUTER_API_KEY` (mirrors AA's `--api-key`/`$AA_API_KEY`); a
-    client-supplied `Authorization` header still wins. Default `p = 0.67` for a
-    bare `pareto` model / when no `p` is supplied. Send `HTTP-Referer` / `X-Title`
-    attribution headers to OpenRouter.
-  - **Out of scope here (→ M5).** OpenRouter `models[]` native fallback (M4 uses
-    only `Primary`; `Fallbacks` are computed but unused), session stickiness,
-    structured per-request logging, and *acting on* mid-stream-error chunks /
-    usage extraction. M4 streams chunks through correctly but does not yet react
-    to them.
-  - **Hygiene.** Add `openrouter-api-key` to `.gitignore` (today only
-    `artificial-analysis-api-key` is listed, and the real untracked key file is
-    `openrouter-api-key`).
 - **M5 — resilience and observability.** Stickiness, OpenRouter `models[]`
   fallback, structured logs, selection trace output, and operator-friendly
   diagnostics.

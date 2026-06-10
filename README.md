@@ -10,7 +10,7 @@ Instead of OpenRouter's `pareto-code` (a curated shortlist + three coarse qualit
 
 ## Status
 
-Under construction. **M0–M3 are complete**: the data layer builds a validated cached snapshot, filters out models below coding index `20.0` before normalization, the pure routing engine selects the cheapest model at or above a continuous quality floor, and M3 dynamically resolves AA candidates to OpenRouter model IDs.
+Under construction. **M0–M4 are complete**: the data layer builds a validated cached snapshot, filters out models below coding index `20.0` before normalization, the pure routing engine selects the cheapest model at or above a continuous quality floor, M3 dynamically resolves AA candidates to OpenRouter model IDs, and M4 serves an OpenAI-compatible proxy that routes `pareto@p` requests to OpenRouter.
 
 ```sh
 make build
@@ -22,11 +22,23 @@ make build
 ./router mappings              # resolve cached candidates to OpenRouter model IDs
 ./router mappings --json       # machine-readable mapping diagnostics
 ./router select --p 0.7 --mapped-only
+./router serve                 # run the OpenAI-compatible proxy on 127.0.0.1:4000
+```
+
+### Using the proxy
+
+`router serve` loads the cached snapshot + OpenRouter catalog, resolves to the mapped candidate set, and serves `POST /v1/chat/completions`. Set the model to `pareto` (uses the default `p`, 0.67) or `pareto@P`, or send an `X-Pareto-P: P` header; the proxy picks the cheapest mapped model at or above `P` and forwards to OpenRouter. Any other model name passes through unchanged. The OpenRouter key comes from `--openrouter-key` or `$OPENROUTER_API_KEY` (a client-supplied `Authorization` header wins).
+
+```sh
+OPENROUTER_API_KEY=sk-or-... ./router serve &
+curl http://127.0.0.1:4000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"pareto@0.8","messages":[{"role":"user","content":"hi"}]}'
 ```
 
 `router mappings` uses the cached AA snapshot plus a cached OpenRouter model catalog from `GET https://openrouter.ai/api/v1/models`. It does not rely on a checked-in alias table: deterministic matches are derived at runtime, ambiguous matches stay unresolved, and `select --mapped-only` excludes unresolved/ambiguous candidates before routing selection.
 
-The OpenAI-compatible proxy (`router serve`) is designed in [`DESIGN.md`](./DESIGN.md) and built in M4.
+The OpenAI-compatible proxy (`router serve`) is designed in [`DESIGN.md`](./DESIGN.md). M5 (resilience + observability: OpenRouter `models[]` fallback, session stickiness, structured logging) is next.
 
 ## Development
 

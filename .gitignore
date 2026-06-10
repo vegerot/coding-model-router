@@ -5,7 +5,7 @@
 # Local snapshot cache (when run with --cache pointing into the repo)
 /snapshot.json
 
-# Secrets — never commit the API key
+# Secrets — never commit API keys
 artificial-analysis-api-key
 openrouter-api-key
 
