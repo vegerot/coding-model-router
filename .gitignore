@@ -1,0 +1,10 @@
+# Build output
+/router
+/bin/
+
+# Local snapshot cache (when run with --cache pointing into the repo)
+/snapshot.json
+
+# Editor / OS cruft
+*.swp
+.DS_Store
