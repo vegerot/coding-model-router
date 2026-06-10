@@ -116,9 +116,36 @@ M4 and later.
 
 ## Future milestones
 
-- **M4 — proxy.** `serve` subcommand; OpenAI-compatible request/response shape;
-  SSE passthrough; knob parsing; use M3 mappings to rewrite selected AA
-  candidates to OpenRouter model IDs.
+- **M4 — proxy (planned, not built).** A new `internal/proxy` package plus a
+  `serve` subcommand that runs a long-running local OpenAI-compatible HTTP
+  server. `proxy` imports `engine`, `mapping`, and `snapshot`; the CLI wiring
+  also uses `refresh`.
+  - **Knob parsing (pure `ParseKnob`, tested first).** `pareto` → default `p`;
+    `pareto@0.7` → `p=0.7`; `X-Pareto-P` header overrides the `@` suffix when the
+    request routes; malformed `p` (non-numeric / outside `[0,1]`) → HTTP 400; any
+    other model name → transparent passthrough (forwarded unchanged).
+  - **Handler (`POST /v1/chat/completions`).** Decode the body into a map to read
+    `model`/`stream` while preserving all other fields, run `engine.Select` over
+    the mapped snapshot, rewrite `model` to `Primary.OpenRouterID`, forward to
+    `https://openrouter.ai/api/v1/chat/completions`, and stream the response back
+    with `http.Flusher` flushing so SSE works live.
+  - **Mapped-only by construction.** The proxy always runs `mapping.Resolve` →
+    `mapping.MappedSnapshot` before selecting, because a primary without an
+    OpenRouter ID cannot be forwarded; `p` is therefore a floor over the *mapped*
+    candidate set (same semantics as `select --mapped-only`).
+  - **Locked decisions.** OpenRouter key from `--openrouter-key` else
+    `$OPENROUTER_API_KEY` (mirrors AA's `--api-key`/`$AA_API_KEY`); a
+    client-supplied `Authorization` header still wins. Default `p = 0.67` for a
+    bare `pareto` model / when no `p` is supplied. Send `HTTP-Referer` / `X-Title`
+    attribution headers to OpenRouter.
+  - **Out of scope here (→ M5).** OpenRouter `models[]` native fallback (M4 uses
+    only `Primary`; `Fallbacks` are computed but unused), session stickiness,
+    structured per-request logging, and *acting on* mid-stream-error chunks /
+    usage extraction. M4 streams chunks through correctly but does not yet react
+    to them.
+  - **Hygiene.** Add `openrouter-api-key` to `.gitignore` (today only
+    `artificial-analysis-api-key` is listed, and the real untracked key file is
+    `openrouter-api-key`).
 - **M5 — resilience and observability.** Stickiness, OpenRouter `models[]`
   fallback, structured logs, selection trace output, and operator-friendly
   diagnostics.
