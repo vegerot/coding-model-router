@@ -36,10 +36,10 @@ Decisions made with the user during the pivot:
 
 ## Scope
 
-Implement **M0–M1**: repo scaffold + data layer + `router snapshot` CLI. The
-routing engine and proxy (M2–M5) are designed in `DESIGN.md` and built later.
+Implement **M0–M1**: repo scaffold + data layer + `router snapshot` CLI. **Done.**
+The routing engine and proxy (M2–M5) are designed in `DESIGN.md` and built later.
 
-## ✅ Progress
+## ✅ Progress (M0–M1 complete)
 
 - [x] **M0 — scaffold.** `go mod`, `cmd/router` subcommand dispatch, Makefile,
   README, DESIGN.md, `.gitignore` (ignores the API key). `go build`/`vet` clean.
@@ -58,22 +58,15 @@ routing engine and proxy (M2–M5) are designed in `DESIGN.md` and built later.
   `Refresh` orchestrator: fetch → build → validate → atomic save, with last-good
   fallback (`stale=true`) on failure. Tests-first in `*_test`; live end-to-end
   test passes (**331 candidates from 507 raw models**).
-- [ ] **M1.5 — `cmd/router/snapshot.go`.** The remaining piece — see below.
-
-## ▶️ Remaining: `router snapshot` CLI (M1.5)
-
-`router snapshot [--refresh] [--json] [--cache PATH] [--api-key KEY]`:
-- API key from `--api-key` else `$AA_API_KEY`.
-- Cache exists & no `--refresh` → print from cache (no network); no cache →
-  auto-fetch; `--refresh` → force fetch. `--json` → emit the raw snapshot JSON.
-- `text/tabwriter` table sorted by blended price ascending:
-  `MODEL · QUALITY · NORM · $/1M(blended) · IN$ · OUT$ · PROVIDER`, a summary line
-  (`N candidates from M models · fetched … · D dropped`), and an
-  **always-printed AA attribution line**.
-- Exit codes: `0` ok, `1` no data (fetch failed, no cache), `2` stale-fallback
-  (served cached snapshot; warnings on stderr).
-- Wire `provider.NewAA(key)` + `refresh.Refresh`. Tests in `main_test` (golden
-  table + exit codes, using `--cache` into a temp dir; no network).
+- [x] **M1.5 — `internal/cli` + `cmd/router`.** `cli.Snapshot` implements
+  `router snapshot [--refresh] [--json] [--cache PATH] [--api-key KEY]`: API key
+  from `--api-key` else `$AA_API_KEY`; cache + no `--refresh` → print from cache
+  (no network), else fetch via `provider.NewAA` + `refresh.Refresh` and cache;
+  `--json` → raw JSON; `text/tabwriter` table sorted cheapest-first
+  (`MODEL·QUALITY·NORM·$/1M·IN$·OUT$·PROVIDER`) + summary + **always-printed AA
+  attribution**; exit codes `0`/`1`/`2` (ok / no-data / stale-fallback). Logic
+  lives in `internal/cli` so it is black-box testable (`cli_test`); `cmd/router`
+  is a thin dispatcher. Live smoke: 331 candidates, cached re-run does no network.
 
 ## 🧪 Conventions & verification
 
