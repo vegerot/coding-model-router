@@ -36,10 +36,11 @@ Decisions made with the user during the pivot:
 
 ## Scope
 
-Implement **M0–M1**: repo scaffold + data layer + `router snapshot` CLI. **Done.**
-The routing engine and proxy (M2–M5) are designed in `DESIGN.md` and built later.
+Implement **M0–M2**: repo scaffold + data layer + `router snapshot` CLI +
+pure routing engine. **Done.** The OpenAI-compatible proxy (M3–M5) is designed
+in `DESIGN.md` and built later.
 
-## ✅ Progress (M0–M1 complete)
+## ✅ Progress (M0–M2 complete)
 
 - [x] **M0 — scaffold.** `go mod`, `cmd/router` subcommand dispatch, Makefile,
   README, DESIGN.md, `.gitignore` (ignores the API key). `go build`/`vet` clean.
@@ -67,6 +68,13 @@ The routing engine and proxy (M2–M5) are designed in `DESIGN.md` and built lat
   attribution**; exit codes `0`/`1`/`2` (ok / no-data / stale-fallback). Logic
   lives in `internal/cli` so it is black-box testable (`cli_test`); `cmd/router`
   is a thin dispatcher. Live smoke: 331 candidates, cached re-run does no network.
+- [x] **M2 — `internal/engine`.** Pure `Select(snapshot, p, opts) → Plan`
+  importing only `internal/snapshot`. `p` is validated in `[0,1]`; selection
+  uses set-dependent normalized quality and picks the cheapest candidate at or
+  above the floor. `Plan` returns the primary plus ordered qualifying fallbacks
+  (cost, then higher quality, then slug). Tests cover p=0 cheapest, p=1 best,
+  monotonic non-decreasing cost as p rises, dominated models never chosen,
+  single-candidate behavior, fallback ordering, and invalid input errors.
 
 ## 🧪 Conventions & verification
 
@@ -81,8 +89,6 @@ The routing engine and proxy (M2–M5) are designed in `DESIGN.md` and built lat
 
 ## Future milestones (designed in DESIGN.md)
 
-- **M2 engine** — pure `Select(snapshot, p, opts) → Plan`; imports only
-  `internal/snapshot`. Cheapest at p=0, best at p=1, monotonic, Pareto-optimal.
 - **M3 proxy** — `serve` subcommand; OpenAI-compatible SSE passthrough; knob
   parsing; **AA slug → OpenRouter ID mapping** lives here.
 - **M4** — stickiness, OpenRouter `models[]` fallback, observability.

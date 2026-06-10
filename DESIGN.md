@@ -171,13 +171,17 @@ Atomic write (`CreateTemp` → write → `Sync` → `Rename`) at
 failure — it returns the last-good snapshot flagged `stale=true` plus the causal
 error.
 
-## Future milestones (designed; not yet built)
+## Built milestones
 
 - **M2 — engine.** Pure function importing only `internal/snapshot`:
-  `Select(s *snapshot.Snapshot, p float64, opts Options) (Plan, error)`; `Plan`
-  = primary + ordered fallbacks (remaining qualifiers by ascending cost score).
-  Unit-tested: cheapest at `p=0`, best at `p=1`, monotonic non-decreasing cost in
-  `p`, dominated models never chosen.
+  `Select(s *snapshot.Snapshot, p float64, opts Options) (Plan, error)`. `Plan`
+  returns the primary model plus ordered fallbacks among the remaining candidates
+  that clear the floor. Unit tests cover cheapest at `p=0`, best at `p=1`,
+  monotonic non-decreasing cost in `p`, dominated models never chosen, fallback
+  ordering, single-candidate behavior, and invalid input errors.
+
+## Future milestones (designed; not yet built)
+
 - **M3 — proxy + OpenRouter mapping.** `serve` subcommand. Knob parsing:
   `pareto@0.7` model name; bare `pareto` → default `p`; `X-Pareto-P` header
   overrides; malformed → 400; other model names → transparent passthrough. SSE

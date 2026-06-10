@@ -1,7 +1,7 @@
 // Command router is a Pareto-style coding-model router.
 //
 // It exposes a single quality knob p ∈ [0,1] and, given Artificial Analysis's
-// coding index plus per-token pricing, selects the cheapest model whose
+// coding index plus blended per-token pricing, selects the cheapest model whose
 // normalized quality is at or above p.
 //
 // Subcommands:
@@ -44,13 +44,12 @@ func usage(w io.Writer) {
 	fmt.Fprint(w, `router — Pareto-style coding-model router
 
 Usage:
-  router snapshot [--refresh] [--json] [--cache PATH]
-      Build or display the candidate model snapshot (quality + token-weighted cost).
+	  router snapshot [--refresh] [--json] [--cache PATH]
+	      Build or display the candidate model snapshot (quality + blended cost).
 
   router help
       Show this help.
 
-Data: Artificial Analysis Coding Agent Index (https://artificialanalysis.ai/agents/coding-agents);
-pricing via models.dev / OpenRouter.
-`)
+Data: Artificial Analysis (https://artificialanalysis.ai).
+	`)
 }
