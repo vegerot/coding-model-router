@@ -75,17 +75,25 @@ in `DESIGN.md` and built later.
   (cost, then higher quality, then slug). Tests cover p=0 cheapest, p=1 best,
   monotonic non-decreasing cost as p rises, dominated models never chosen,
   single-candidate behavior, fallback ordering, and invalid input errors.
+- [x] **M2.1 — CLI selection.** `router select [--p P] [--refresh] [--json]
+  [--cache PATH] [--api-key KEY]` loads the cached/refreshed snapshot, calls
+  `engine.Select`, and prints the selected primary plus ordered fallbacks.
+  JSON output includes the plan, snapshot source metadata, fetch time, and AA
+  attribution.
 
 ## 🧪 Conventions & verification
 
 - **Tests first**, in external `_test` packages (only exported API).
-- Commit after each step; messages end with the `Co-Authored-By: Claude` trailer.
+- Commit after each step; messages end with a
+  `Co-Authored-By: <agent name> <agent email>` trailer, using the name and email
+  of the agent that wrote the code.
 - Offline: `go build ./... && go vet ./... && go test ./...`.
 - Live: `make live-test` (`go test -tags live ./...`) with `AA_API_KEY` set —
   shape-contract tests against the real API (skip when the key is unset).
 - Manual: `AA_API_KEY=… go run ./cmd/router snapshot --refresh` → ~300 candidates,
   cheapest first; re-run without `--refresh` → served from cache, no network;
-  `… snapshot --json | python3 -m json.tool` → valid.
+  `… snapshot --json | python3 -m json.tool` → valid; `… select --p 0.7`
+  prints the selected primary and fallbacks from the cached/refreshed snapshot.
 
 ## Future milestones (designed in DESIGN.md)
 

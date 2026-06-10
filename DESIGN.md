@@ -72,7 +72,7 @@ client (aider / Claude Code / curl)
 ### Package layout
 
 ```
-cmd/router/            CLI: subcommand dispatch + `snapshot` (M1) + `serve` (M3)
+cmd/router/            CLI: subcommand dispatch + `snapshot` (M1), `select` (M2), `serve` (M3)
 internal/provider/     BenchmarkProvider interface + provider-agnostic Model record
 internal/provider/aa/  Artificial Analysis Data API provider (default)
 internal/snapshot/     Snapshot/Candidate types, NormalizedQuality + CostScores, store
@@ -178,7 +178,10 @@ error.
   returns the primary model plus ordered fallbacks among the remaining candidates
   that clear the floor. Unit tests cover cheapest at `p=0`, best at `p=1`,
   monotonic non-decreasing cost in `p`, dominated models never chosen, fallback
-  ordering, single-candidate behavior, and invalid input errors.
+  ordering, single-candidate behavior, and invalid input errors. The engine is
+  available from the CLI via `router select [--p P] [--refresh] [--json]
+  [--cache PATH]`, which loads the snapshot and displays the primary plus
+  fallbacks with AA attribution.
 
 ## Future milestones (designed; not yet built)
 

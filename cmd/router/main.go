@@ -7,6 +7,7 @@
 // Subcommands:
 //
 //	router snapshot   build/show the candidate model snapshot (data layer; M1)
+//	router select     choose a model from the cached/refreshed snapshot (M2)
 //	router serve      (future, M3) run the OpenAI-compatible proxy
 package main
 
@@ -30,6 +31,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "snapshot":
 		return cli.Snapshot(args[1:], stdout, stderr)
+	case "select":
+		return cli.Select(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		usage(stdout)
 		return 0
@@ -44,8 +47,11 @@ func usage(w io.Writer) {
 	fmt.Fprint(w, `router — Pareto-style coding-model router
 
 Usage:
-	  router snapshot [--refresh] [--json] [--cache PATH]
-	      Build or display the candidate model snapshot (quality + blended cost).
+  router snapshot [--refresh] [--json] [--cache PATH]
+      Build or display the candidate model snapshot (quality + blended cost).
+
+  router select [--p P] [--refresh] [--json] [--cache PATH]
+      Select the cheapest model at or above quality floor P.
 
   router help
       Show this help.

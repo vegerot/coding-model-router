@@ -17,6 +17,8 @@ make build
 ./router snapshot --refresh    # fetch live data, build + cache the snapshot, print the table
 ./router snapshot              # print from cache (no network)
 ./router snapshot --json       # machine-readable snapshot
+./router select --p 0.7        # choose the cheapest model at or above p=0.7
+./router select --p 0.7 --json # machine-readable selection plan
 ```
 
 The OpenAI-compatible proxy (`router serve`) is designed in [`DESIGN.md`](./DESIGN.md) and built in later milestones.
