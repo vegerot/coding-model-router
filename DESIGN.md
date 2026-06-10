@@ -23,6 +23,11 @@ three coarse quality tiers. This project improves on it three ways:
   **cheapest candidate at or above the floor** by composite cost score. This is
   automatically Pareto-optimal. `p=0` → cheapest overall; `p=1` → top-ranked
   regardless of cost. Tie-break: higher quality, then stable by slug.
+- **Candidate eligibility — pre-normalization coding floor.** Models with
+  `artificial_analysis_coding_index < 20.0` are dropped before snapshot
+  candidates are built. This keeps tiny/weak models out of normalization and
+  routing while staying within AA free-tier fields. Future context-window gates
+  can use AA Pro `context_window_tokens` or models.dev metadata.
 - **Shape — local OpenAI-compatible proxy.** Serves `/v1/chat/completions`,
   accepts the knob via model name (`pareto@0.7`) and/or header, rewrites the
   model field, forwards to OpenRouter with SSE streaming passthrough.
@@ -139,8 +144,8 @@ and `prompt_tokens`/`completion_tokens`, under Apache-2.0.
 ### Build pipeline (pure)
 
 `Build(models []provider.Model, fetchedAt) → (Snapshot, warnings, error)`:
-keep models that have a coding index **and** input price **and** output price
-(others → `Dropped` with a reason) → compute
+keep models that have a coding index **≥ 20.0** and input price **and** output
+price (others → `Dropped` with a reason) → compute
 `BlendedPricePer1M = (3·input + output)/4` → fill `Candidate` → sort by
 `BlendedPricePer1M`. Normalized quality is computed by the `snapshot` helper at
 use time, not stored.
@@ -173,7 +178,7 @@ error.
 
 ## Built milestones
 
-- **M2 — engine.** Pure function importing only `internal/snapshot`:
+- **M2 — engine + eligibility.** Pure function importing only `internal/snapshot`:
   `Select(s *snapshot.Snapshot, p float64, opts Options) (Plan, error)`. `Plan`
   returns the primary model plus ordered fallbacks among the remaining candidates
   that clear the floor. Unit tests cover cheapest at `p=0`, best at `p=1`,
@@ -181,7 +186,9 @@ error.
   ordering, single-candidate behavior, and invalid input errors. The engine is
   available from the CLI via `router select [--p P] [--refresh] [--json]
   [--cache PATH]`, which loads the snapshot and displays the primary plus
-  fallbacks with AA attribution.
+  fallbacks with AA attribution. The data layer filters out models below coding
+  index `20.0` before normalization and bumps the snapshot schema to reject stale
+  pre-filter caches.
 
 ## Future milestones (designed; not yet built)
 

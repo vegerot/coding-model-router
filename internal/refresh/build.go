@@ -5,6 +5,7 @@
 package refresh
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -12,8 +13,11 @@ import (
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
 
+const minCandidateCodingIndex = 20.0
+
 // Build transforms provider models into a Snapshot: it drops models missing a
-// coding index or input/output pricing (recording each with a reason), computes
+// coding index, models below the minimum coding-index eligibility floor, or
+// models missing input/output pricing (recording each with a reason), computes
 // the blended per-token cost axis, and sorts candidates by ascending blended
 // price. It is pure — validation is a separate step (Validate).
 func Build(models []provider.Model, providerName string, fetchedAt time.Time) *snapshot.Snapshot {
@@ -65,6 +69,8 @@ func dropReason(m provider.Model) string {
 		return "empty slug"
 	case m.CodingIndex == nil:
 		return "missing coding index"
+	case *m.CodingIndex < minCandidateCodingIndex:
+		return fmt.Sprintf("coding index below minimum: %.1f < %.0f", *m.CodingIndex, minCandidateCodingIndex)
 	case m.InputPricePer1M == nil:
 		return "missing input price"
 	case m.OutputPricePer1M == nil:

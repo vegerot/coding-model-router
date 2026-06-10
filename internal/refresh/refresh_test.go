@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +99,31 @@ func TestBuildSortsByBlendedPriceAscending(t *testing.T) {
 	}
 	if s.Candidates[0].Slug != "cheap" {
 		t.Errorf("cheapest first expected 'cheap', got %q", s.Candidates[0].Slug)
+	}
+}
+
+func TestBuildDropsModelsBelowMinimumCodingIndex(t *testing.T) {
+	models := []provider.Model{
+		validModel("too-small", 19.9, 1, 4),
+		validModel("threshold", 20.0, 2, 8),
+		validModel("above-threshold", 20.1, 3, 12),
+	}
+	s := refresh.Build(models, "p", at())
+
+	if len(s.Candidates) != 2 {
+		t.Fatalf("candidate count = %d, want 2 (%+v)", len(s.Candidates), s.Candidates)
+	}
+	for _, c := range s.Candidates {
+		if c.Slug == "too-small" {
+			t.Fatalf("below-threshold model survived: %+v", c)
+		}
+	}
+	if len(s.Dropped) != 1 {
+		t.Fatalf("dropped count = %d, want 1 (%+v)", len(s.Dropped), s.Dropped)
+	}
+	if s.Dropped[0].Slug != "too-small" ||
+		!strings.Contains(s.Dropped[0].Reason, "coding index below minimum: 19.9 < 20") {
+		t.Fatalf("unexpected dropped row: %+v", s.Dropped[0])
 	}
 }
 

@@ -36,11 +36,12 @@ Decisions made with the user during the pivot:
 
 ## Scope
 
-Implement **M0–M2**: repo scaffold + data layer + `router snapshot` CLI +
-pure routing engine. **Done.** The OpenAI-compatible proxy (M3–M5) is designed
-in `DESIGN.md` and built later.
+Implement **M0–M2.2**: repo scaffold + data layer + `router snapshot` CLI,
+pure routing engine, CLI selection, and pre-normalization eligibility filtering.
+**Done.** The OpenAI-compatible proxy (M3–M5) is designed in `DESIGN.md` and
+built later.
 
-## ✅ Progress (M0–M2 complete)
+## ✅ Progress (M0–M2.2 complete)
 
 - [x] **M0 — scaffold.** `go mod`, `cmd/router` subcommand dispatch, Makefile,
   README, DESIGN.md, `.gitignore` (ignores the API key). `go build`/`vet` clean.
@@ -80,6 +81,12 @@ in `DESIGN.md` and built later.
   `engine.Select`, and prints the selected primary plus ordered fallbacks.
   JSON output includes the plan, snapshot source metadata, fetch time, and AA
   attribution.
+- [x] **M2.2 — pre-normalization eligibility filter.** `refresh.Build` now drops
+  models with `artificial_analysis_coding_index < 20.0` before they enter
+  `Snapshot.Candidates`, so `NormalizedQuality` and `engine.Select` operate only
+  over coding-eligible models. Models exactly at `20.0` remain eligible; dropped
+  rows record `coding index below minimum: X < 20`. `snapshot.SchemaVersion` is
+  bumped to `2` so stale caches with too-small candidates are rejected.
 
 ## 🧪 Conventions & verification
 
@@ -97,21 +104,6 @@ in `DESIGN.md` and built later.
 
 ## Future milestones (designed in DESIGN.md)
 
-- **M2.2 pre-normalization eligibility filter** — fix the current candidate set
-  including models that are too small/weak for coding harnesses. Build-time
-  filtering should use only AA free-tier data for now: drop models with
-  `artificial_analysis_coding_index < 20.0` before they enter
-  `Snapshot.Candidates`, so normalization and `engine.Select` operate only over
-  eligible models. Models exactly at `20.0` remain eligible. Dropped rows should
-  record a clear reason such as `coding index below minimum: 18.5 < 20`.
-  Implementation should bump `snapshot.SchemaVersion` from `1` to `2` so stale
-  caches that include too-small models are rejected and refreshed. Tests should
-  cover below-threshold drop, threshold-inclusive keep, schema mismatch, and the
-  normal offline suite (`go test ./...`, `go build ./...`, `go vet ./...`).
-  When implemented, update `DESIGN.md` and `README.md` to document the behavior.
-  Future improvements: replace or supplement the score gate with a context-size
-  minimum from AA Pro `context_window_tokens`, or from models.dev context
-  metadata.
 - **M3 proxy** — `serve` subcommand; OpenAI-compatible SSE passthrough; knob
   parsing; **AA slug → OpenRouter ID mapping** lives here.
 - **M4** — stickiness, OpenRouter `models[]` fallback, observability.
@@ -121,4 +113,5 @@ in `DESIGN.md` and built later.
 
 Token-weighted cost (the big one) · Aider / SWE-bench providers · adaptive
 `p=auto` · budget governor · calibration · shadow/A-B · speed axis · capability
-filters · tunable cost weighting.
+filters (including future context-window minimums from AA Pro or models.dev) ·
+tunable cost weighting.

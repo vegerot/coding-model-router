@@ -10,7 +10,7 @@ Instead of OpenRouter's `pareto-code` (a curated shortlist + three coarse qualit
 
 ## Status
 
-Under construction. **M0–M2 are complete**: the data layer builds a validated cached snapshot, and the pure routing engine selects the cheapest model at or above a continuous quality floor.
+Under construction. **M0–M2.2 are complete**: the data layer builds a validated cached snapshot, filters out models below coding index `20.0` before normalization, and the pure routing engine selects the cheapest model at or above a continuous quality floor.
 
 ```sh
 make build
