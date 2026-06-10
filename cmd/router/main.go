@@ -8,7 +8,8 @@
 //
 //	router snapshot   build/show the candidate model snapshot (data layer; M1)
 //	router select     choose a model from the cached/refreshed snapshot (M2)
-//	router serve      (future, M3) run the OpenAI-compatible proxy
+//	router mappings   resolve candidates to OpenRouter IDs (M3)
+//	router serve      (future, M4) run the OpenAI-compatible proxy
 package main
 
 import (
@@ -33,6 +34,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cli.Snapshot(args[1:], stdout, stderr)
 	case "select":
 		return cli.Select(args[1:], stdout, stderr)
+	case "mappings":
+		return cli.Mappings(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		usage(stdout)
 		return 0
@@ -50,8 +53,11 @@ Usage:
   router snapshot [--refresh] [--json] [--cache PATH]
       Build or display the candidate model snapshot (quality + blended cost).
 
-  router select [--p P] [--refresh] [--json] [--cache PATH]
+  router select [--p P] [--refresh] [--json] [--cache PATH] [--mapped-only]
       Select the cheapest model at or above quality floor P.
+
+  router mappings [--refresh] [--json] [--cache PATH] [--openrouter-cache PATH]
+      Resolve snapshot candidates to OpenRouter model IDs.
 
   router help
       Show this help.

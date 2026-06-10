@@ -36,12 +36,12 @@ Decisions made with the user during the pivot:
 
 ## Scope
 
-Implement **M0–M2.2**: repo scaffold + data layer + `router snapshot` CLI,
-pure routing engine, CLI selection, and pre-normalization eligibility filtering.
-**Done.** Dynamic OpenRouter mapping (M3) comes next; the OpenAI-compatible
-proxy moves to M4 and later.
+Implement **M0–M3**: repo scaffold + data layer + `router snapshot` CLI,
+pure routing engine, CLI selection, pre-normalization eligibility filtering,
+and dynamic OpenRouter mapping. **Done.** The OpenAI-compatible proxy moves to
+M4 and later.
 
-## ✅ Progress (M0–M2.2 complete)
+## ✅ Progress (M0–M3 complete)
 
 - [x] **M0 — scaffold.** `go mod`, `cmd/router` subcommand dispatch, Makefile,
   README, DESIGN.md, `.gitignore` (ignores the API key). `go build`/`vet` clean.
@@ -87,6 +87,16 @@ proxy moves to M4 and later.
   over coding-eligible models. Models exactly at `20.0` remain eligible; dropped
   rows record `coding index below minimum: X < 20`. `snapshot.SchemaVersion` is
   bumped to `2` so stale caches with too-small candidates are rejected.
+- [x] **M3 — dynamic OpenRouter mapping.** `internal/mapping` fetches and caches
+  OpenRouter's model catalog, resolves AA candidates to OpenRouter IDs with
+  deterministic provider/name rules, and keeps ambiguous/unresolved candidates
+  out of mapped-only routing. `router mappings` prints mapped/unmapped/ambiguous
+  diagnostics plus top unmapped candidates by AA coding quality; `--json` emits
+  the full report. `router select --mapped-only` filters the snapshot to mapped
+  candidates, sets `Candidate.OpenRouterID`, then calls the same pure M2 engine.
+  The planning experiment found strict deterministic catalog matching resolved
+  **141 / 189 candidates (74.6%)**, including all top 20 candidates by AA coding
+  quality, while avoiding checked-in alias churn.
 
 ## 🧪 Conventions & verification
 
@@ -100,63 +110,11 @@ proxy moves to M4 and later.
 - Manual: `AA_API_KEY=… go run ./cmd/router snapshot --refresh` → ~300 candidates,
   cheapest first; re-run without `--refresh` → served from cache, no network;
   `… snapshot --json | python3 -m json.tool` → valid; `… select --p 0.7`
-  prints the selected primary and fallbacks from the cached/refreshed snapshot.
+  prints the selected primary and fallbacks from the cached/refreshed snapshot;
+  `… mappings` prints OpenRouter resolution diagnostics; `… select --mapped-only`
+  selects only candidates with resolved OpenRouter IDs.
 
 ## Future milestones
-
-- **M3 — dynamic OpenRouter mapping.** Make AA slug → OpenRouter model ID
-  resolution its own milestone before proxying. The resolver should use the
-  current AA snapshot plus the live OpenRouter catalog from
-  `GET https://openrouter.ai/api/v1/models`, then cache the catalog locally so
-  diagnostics and mapped-only selection do not require a network call every run.
-  Update `DESIGN.md` and `README.md` when this is implemented.
-
-  Experiment justification:
-  - `go run ./... snapshot --json` produced **189** coding-eligible AA
-    candidates after the M2.2 filter.
-  - The AA free endpoint exposed **0** `openRouterId` / `openrouter_api_id`
-    values for those candidates.
-  - The repo had **0** curated aliases checked in.
-  - Strict deterministic matching against the OpenRouter model catalog resolved
-    **141 / 189 candidates (74.6%)**.
-  - The **top 20** candidates by AA coding quality were resolvable; the **top
-    25** were not all resolvable.
-  - Several AA reasoning-effort variants naturally collapse to one OpenRouter
-    model ID, e.g. `gpt-5-5-high`, `gpt-5-5-medium`, `gpt-5-5-low`, and
-    `gpt-5-5-non-reasoning` all resolve to `openai/gpt-5.5`.
-
-  Mapping policy:
-  - Do **not** check in an alias table for M3; new model releases should not
-    require code changes just to become eligible for resolution.
-  - Do **not** add a local override file in M3.
-  - Use deterministic runtime rules only: provider/creator must match where
-    known; normalized AA slug/name must exactly match normalized OpenRouter
-    ID/name; effort labels such as `xhigh`, `high`, `medium`, `low`, `minimal`,
-    `adaptive`, `reasoning`, and `non-reasoning` may be ignored for model-ID
-    matching.
-  - Do **not** use fuzzy runtime matching. Ambiguous matches are unresolved and
-    excluded from mapped-only selection.
-  - If multiple AA variants deterministically map to the same OpenRouter ID,
-    keep them as distinct AA candidates while routing them to that same
-    OpenRouter ID.
-
-  CLI/API surface:
-  - Add `router mappings` diagnostics with mapped/unmapped/ambiguous counts and
-    percentages, top unmapped candidates sorted by AA coding quality, and
-    `--json` output.
-  - Add `router select --mapped-only` so selection can ignore unresolved or
-    ambiguous candidates before calling the routing engine.
-  - Keep proxy serving, request rewriting, streaming, auth forwarding, retry
-    behavior, and OpenRouter request execution out of M3.
-
-  Test plan:
-  - Resolver tests for deterministic pairs, ambiguity, provider mismatch, and
-    effort-label collapse.
-  - CLI tests for `router mappings` counts, sorted unmapped output, JSON output,
-    and `router select --mapped-only`.
-  - Fixture tests with checked-in AA snapshot and OpenRouter model-list fixtures
-    so resolver behavior is deterministic offline.
-  - Verify with `go test ./...`, `go build ./...`, and `go vet ./...`.
 
 - **M4 — proxy.** `serve` subcommand; OpenAI-compatible request/response shape;
   SSE passthrough; knob parsing; use M3 mappings to rewrite selected AA

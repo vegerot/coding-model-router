@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 2,
+  "fetchedAt": "2026-06-09T12:00:00Z",
+  "attribution": "Quality & pricing data: Artificial Analysis (https://artificialanalysis.ai). Used under their terms; attribution required.",
+  "sources": {
+    "provider": "artificial-analysis",
+    "modelCount": 4
+  },
+  "candidates": [
+    {
+      "slug": "gpt-5-5-high",
+      "name": "GPT-5.5 (high)",
+      "creator": "OpenAI",
+      "quality": 95,
+      "inputPricePer1m": 5,
+      "outputPricePer1m": 30,
+      "blendedPricePer1m": 11.25,
+      "provider": "artificial-analysis"
+    },
+    {
+      "slug": "claude-sonnet-4-5",
+      "name": "Claude Sonnet 4.5",
+      "creator": "Anthropic",
+      "quality": 90,
+      "inputPricePer1m": 3,
+      "outputPricePer1m": 15,
+      "blendedPricePer1m": 6,
+      "provider": "artificial-analysis"
+    },
+    {
+      "slug": "ambiguous",
+      "name": "Ambiguous",
+      "creator": "OpenAI",
+      "quality": 80,
+      "inputPricePer1m": 1,
+      "outputPricePer1m": 2,
+      "blendedPricePer1m": 1.25,
+      "provider": "artificial-analysis"
+    },
+    {
+      "slug": "missing-model",
+      "name": "Missing Model",
+      "creator": "OpenAI",
+      "quality": 70,
+      "inputPricePer1m": 1,
+      "outputPricePer1m": 1,
+      "blendedPricePer1m": 1,
+      "provider": "artificial-analysis"
+    }
+  ]
+}

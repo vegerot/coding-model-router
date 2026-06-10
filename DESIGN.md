@@ -28,6 +28,14 @@ three coarse quality tiers. This project improves on it three ways:
   candidates are built. This keeps tiny/weak models out of normalization and
   routing while staying within AA free-tier fields. Future context-window gates
   can use AA Pro `context_window_tokens` or models.dev metadata.
+- **M3 mapping — dynamic, deterministic, no checked-in alias table.** AA free
+  tier omits `openrouter_api_id`, so M3 resolves AA candidates against the live
+  OpenRouter `/api/v1/models` catalog and caches that catalog locally. Matching
+  is deterministic only: provider/creator must match where known; normalized AA
+  slug/name must exactly match normalized OpenRouter ID/name; reasoning-effort
+  labels such as `xhigh`, `high`, `medium`, `low`, `minimal`, `adaptive`,
+  `reasoning`, and `non-reasoning` may be ignored. Ambiguous matches remain
+  unresolved.
 - **Shape — local OpenAI-compatible proxy.** Serves `/v1/chat/completions`,
   accepts the knob via model name (`pareto@0.7`) and/or header, rewrites the
   model field, forwards to OpenRouter with SSE streaming passthrough.
@@ -77,18 +85,21 @@ client (aider / Claude Code / curl)
 ### Package layout
 
 ```
-cmd/router/            CLI: subcommand dispatch + `snapshot` (M1), `select` (M2), `serve` (M3)
+cmd/router/            CLI: subcommand dispatch + `snapshot` (M1), `select` (M2), `mappings` (M3)
 internal/provider/     BenchmarkProvider interface + provider-agnostic Model record
 internal/provider/aa/  Artificial Analysis Data API provider (default)
 internal/snapshot/     Snapshot/Candidate types, NormalizedQuality + CostScores, store
 internal/refresh/      pure Build (Model→Snapshot), validation, Refresh orchestrator
 internal/engine/       (M2) pure Select(snapshot, p, opts) → routing plan
-internal/proxy/        (M3) OpenAI-compatible server, SSE passthrough, stickiness
+internal/mapping/      (M3) OpenRouter catalog cache + deterministic AA→OpenRouter resolver
+internal/proxy/        (M4) OpenAI-compatible server, SSE passthrough, stickiness
 ```
 
 Dependency direction: `refresh → {provider, snapshot}`; `provider/aa` →
 `provider`; `snapshot` imports nothing internal (the engine seam). M2's `engine`
-imports only `snapshot`. M3's `proxy` imports `engine` + `refresh`.
+imports only `snapshot`. M3's `mapping` imports only `snapshot`; the CLI composes
+`snapshot`, `engine`, and `mapping`. M4's `proxy` imports `engine`, `mapping`,
+and `refresh`.
 
 ## Pluggable provider interface
 
@@ -133,9 +144,9 @@ and `prompt_tokens`/`completion_tokens`, under Apache-2.0.
   price_1m_cache_hit_tokens, price_1m_cache_write_tokens}`,
   `artificial_analysis_intelligence_index_cost.total_cost`.
 - `openrouter_api_id` is **Pro-tier only** (absent on free). The OpenRouter ID is
-  needed only for *routing* (M3), not for the snapshot; with a free key we map
-  AA slug → OpenRouter ID later (small alias table / fuzzy match), with a Pro key
-  the field is in-band. The snapshot is keyed by AA `slug`.
+  needed only for routing. With a free AA key, M3 maps AA slug/name to
+  OpenRouter ID dynamically from OpenRouter's live catalog; with a future Pro key
+  the field can be used in-band. The snapshot is keyed by AA `slug`.
 - The API key is read from `$AA_API_KEY` (or `--api-key`); it is never logged or
   committed (`.gitignore`d).
 
@@ -189,23 +200,32 @@ error.
   fallbacks with AA attribution. The data layer filters out models below coding
   index `20.0` before normalization and bumps the snapshot schema to reject stale
   pre-filter caches.
+- **M3 — dynamic OpenRouter mapping.** `internal/mapping` persists a local
+  OpenRouter catalog cache at
+  `os.UserCacheDir()/coding-model-router/openrouter-models.json`, fetches
+  `GET https://openrouter.ai/api/v1/models` on demand, and resolves AA
+  candidates with deterministic provider/name matching. `router mappings`
+  reports mapped/unmapped/ambiguous counts, top unmapped candidates by AA coding
+  quality, and JSON diagnostics. `router select --mapped-only` resolves the
+  snapshot first, drops unresolved/ambiguous candidates, sets `Candidate.OpenRouterID`
+  on mapped candidates, and then calls the same pure M2 engine.
 
 ## Future milestones (designed; not yet built)
 
-- **M3 — proxy + OpenRouter mapping.** `serve` subcommand. Knob parsing:
+- **M4 — proxy.** `serve` subcommand. Knob parsing:
   `pareto@0.7` model name; bare `pareto` → default `p`; `X-Pareto-P` header
   overrides; malformed → 400; other model names → transparent passthrough. SSE
   passthrough with mid-stream-error chunk inspection; usage from the final chunk.
-  This is where AA slug → OpenRouter ID mapping lives (alias table / fuzzy match
-  against OpenRouter `/api/v1/models`, or a Pro key's `openrouter_api_id`).
-- **M4 — resilience + observability.** Stickiness keyed by `X-Session-Id` (else a
+  Uses M3's mapped candidates to rewrite selected AA slugs to OpenRouter model
+  IDs.
+- **M5 — resilience + observability.** Stickiness keyed by `X-Session-Id` (else a
   hash of system prompt + first user message); in-memory, sliding ~5 min TTL;
   pins model+provider; refreshes apply to new sessions only. Fallback via
   OpenRouter `models[]` + transport retry; honor `Retry-After`. Per-request log:
   chosen model, `p`, cost score, actual `usage.cost`, fallback hops.
-- **M5 — polish.** README usage examples, license.
+- **M6 — polish.** README usage examples, license.
 
-## OpenRouter mechanics (verified from docs, for M3/M4)
+## OpenRouter mechanics (for M4+)
 
 - **Native fallback** — request param `models: []` (priority order); OpenRouter
   retries on any error and reports/bills the model that served via response
@@ -248,5 +268,8 @@ error.
   backstop.
 - **`total_cost` is the Intelligence Index workload**, not coding-specific — the
   best free proxy for token burn, but not a true coding-task cost.
-- **AA slug → OpenRouter ID mapping** (deferred to M3) is the new ongoing
-  maintenance cost in place of the old scrape's alias table.
+- **Dynamic AA slug → OpenRouter ID mapping can leave gaps** — deterministic
+  runtime matching avoids checked-in alias churn, but newly released models may
+  be unmapped or ambiguous until OpenRouter naming converges. `router mappings`
+  surfaces those gaps, and a future user-local override file can handle urgent
+  one-off aliases without code changes.

@@ -10,7 +10,7 @@ Instead of OpenRouter's `pareto-code` (a curated shortlist + three coarse qualit
 
 ## Status
 
-Under construction. **M0–M2.2 are complete**: the data layer builds a validated cached snapshot, filters out models below coding index `20.0` before normalization, and the pure routing engine selects the cheapest model at or above a continuous quality floor.
+Under construction. **M0–M3 are complete**: the data layer builds a validated cached snapshot, filters out models below coding index `20.0` before normalization, the pure routing engine selects the cheapest model at or above a continuous quality floor, and M3 dynamically resolves AA candidates to OpenRouter model IDs.
 
 ```sh
 make build
@@ -19,9 +19,14 @@ make build
 ./router snapshot --json       # machine-readable snapshot
 ./router select --p 0.7        # choose the cheapest model at or above p=0.7
 ./router select --p 0.7 --json # machine-readable selection plan
+./router mappings              # resolve cached candidates to OpenRouter model IDs
+./router mappings --json       # machine-readable mapping diagnostics
+./router select --p 0.7 --mapped-only
 ```
 
-The OpenAI-compatible proxy (`router serve`) is designed in [`DESIGN.md`](./DESIGN.md) and built in later milestones.
+`router mappings` uses the cached AA snapshot plus a cached OpenRouter model catalog from `GET https://openrouter.ai/api/v1/models`. It does not rely on a checked-in alias table: deterministic matches are derived at runtime, ambiguous matches stay unresolved, and `select --mapped-only` excludes unresolved/ambiguous candidates before routing selection.
+
+The OpenAI-compatible proxy (`router serve`) is designed in [`DESIGN.md`](./DESIGN.md) and built in M4.
 
 ## Development
 
@@ -37,3 +42,4 @@ Requires Go 1.26+. No third-party dependencies.
 ## Attribution
 
 - **Quality and pricing data:** [Artificial Analysis](https://artificialanalysis.ai). Used under their terms; attribution required wherever this data is displayed.
+- **Model catalog data:** OpenRouter `/api/v1/models`.
