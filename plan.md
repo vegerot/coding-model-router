@@ -148,6 +148,9 @@ M4 and later.
     + filters (including future context-window minimums from AA Pro or models.dev)
   * speed axis
   * user-local OpenRouter alias overrides such as `~/.config/coding-model-router/openrouter-aliases.json`.
+  * `proxy.Config.UpstreamBase` and `Client` are configurable in the API but not exposed as `serve` CLI flags
+  * `proxy.Config.Referer` and `Title` are hardcoded — add `--referer` / `--title` flags to `serve`
+  * `Plan.Fallbacks` are computed by the engine but never sent to OpenRouter as `models[]` — proxy only forwards with `Primary.OpenRouterID`
 - great
   * Aider / SWE-bench providers
   * capability
