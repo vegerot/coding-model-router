@@ -18,7 +18,7 @@ func mappedSnapshot() *snapshot.Snapshot {
 		SchemaVersion: snapshot.SchemaVersion,
 		Attribution:   snapshot.Attribution,
 		Candidates: []snapshot.Candidate{
-			{Slug: "cheap", OpenRouterID: "test/cheap", Name: "Cheap", Quality: 30, InputPricePer1M: 1, OutputPricePer1M: 1, BlendedPricePer1M: 1, Provider: "test"},
+			{Slug: "cheap", OpenRouterID: "test/cheap", Name: "Cheap", Quality: 30, InputPricePer1M: 0.1, OutputPricePer1M: 0.1, BlendedPricePer1M: 0.1, Provider: "test"},
 			{Slug: "mid", OpenRouterID: "test/mid", Name: "Mid", Quality: 50, InputPricePer1M: 5, OutputPricePer1M: 5, BlendedPricePer1M: 5, Provider: "test"},
 			{Slug: "top", OpenRouterID: "test/top", Name: "Top", Quality: 90, InputPricePer1M: 20, OutputPricePer1M: 20, BlendedPricePer1M: 20, Provider: "test"},
 		},
@@ -106,17 +106,67 @@ func TestServeRoutesAndRewritesModel(t *testing.T) {
 	}
 }
 
-func TestServePicksCheapestAboveFloor(t *testing.T) {
+func TestServeSessionStickinessWithSessionID(t *testing.T) {
 	var cap capture
 	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
 	defer up.Close()
 	px := newProxy(t, mappedSnapshot(), up.URL)
 	defer px.Close()
 
-	resp := post(t, px.URL, `{"model":"pareto@0.3","messages":[]}`, nil)
+	resp := post(t, px.URL, `{"model":"pareto@0.0","messages":[]}`, map[string]string{"X-Session-Id": "abc"})
 	resp.Body.Close()
-	if cap.model != "test/mid" {
-		t.Errorf("upstream model = %q, want test/mid", cap.model)
+	if cap.model != "test/cheap" {
+		t.Fatalf("first routing model = %q, want test/cheap", cap.model)
+	}
+
+	resp = post(t, px.URL, `{"model":"pareto@0.0","messages":[]}`, map[string]string{"X-Session-Id": "abc"})
+	resp.Body.Close()
+	if cap.calls != 2 {
+		t.Fatalf("upstream calls = %d, want 2", cap.calls)
+	}
+	if cap.model != "test/cheap" {
+		t.Fatalf("sticky model = %q, want test/cheap", cap.model)
+	}
+}
+
+func TestServeSessionStickinessIncludesP(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
+	defer up.Close()
+	px := newProxy(t, mappedSnapshot(), up.URL)
+	defer px.Close()
+
+	resp := post(t, px.URL, `{"model":"pareto@0.0","messages":[]}`, map[string]string{"X-Session-Id": "abc"})
+	resp.Body.Close()
+	if cap.model != "test/cheap" {
+		t.Fatalf("first routing model = %q, want test/cheap", cap.model)
+	}
+
+	resp = post(t, px.URL, `{"model":"pareto@1.0","messages":[]}`, map[string]string{"X-Session-Id": "abc"})
+	resp.Body.Close()
+	if cap.model != "test/top" {
+		t.Fatalf("updated p routing model = %q, want test/top", cap.model)
+	}
+}
+
+func TestServeSessionStickinessWithFingerprint(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
+	defer up.Close()
+	px := newProxy(t, mappedSnapshot(), up.URL)
+	defer px.Close()
+
+	body := `{"model":"pareto@0.0","messages":[{"role":"system","content":"sys"},{"role":"user","content":"hello"}]}`
+	resp := post(t, px.URL, body, nil)
+	resp.Body.Close()
+	if cap.model != "test/cheap" {
+		t.Fatalf("fingerprint routing model = %q, want test/cheap", cap.model)
+	}
+
+	resp = post(t, px.URL, body, nil)
+	resp.Body.Close()
+	if cap.model != "test/cheap" {
+		t.Fatalf("fingerprint sticky model = %q, want test/cheap", cap.model)
 	}
 }
 
