@@ -25,7 +25,17 @@ func TestMappingsPrintsDiagnosticsFromCache(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, errOut.String())
 	}
 	got := out.String()
-	for _, want := range []string{"MODEL", "STATUS", "OPENROUTER_ID", "cheap-low", "mapped", "pricey-top", "unmapped", "2/3 mapped", "Artificial Analysis"} {
+	for _, want := range []string{
+		"MODEL",
+		"STATUS",
+		"OPENROUTER_ID",
+		"cheap-low",
+		"mapped",
+		"pricey-top",
+		"unmapped",
+		"2/3 mapped",
+		"Artificial Analysis",
+	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("mappings output missing %q\n---\n%s", want, got)
 		}

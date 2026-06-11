@@ -58,7 +58,17 @@ func NewServer(cfg Config) (*Server, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &Server{snapshot: cfg.Snapshot, defaultP: cfg.DefaultP, openRouterKey: cfg.OpenRouterKey, upstreamBase: strings.TrimRight(base, "/"), client: client, referer: cfg.Referer, title: cfg.Title, logger: cfg.Logger, stickies: newStickyStore(defaultStickyTTL)}, nil
+	return &Server{
+		snapshot:      cfg.Snapshot,
+		defaultP:      cfg.DefaultP,
+		openRouterKey: cfg.OpenRouterKey,
+		upstreamBase:  strings.TrimRight(base, "/"),
+		client:        client,
+		referer:       cfg.Referer,
+		title:         cfg.Title,
+		logger:        cfg.Logger,
+		stickies:      newStickyStore(defaultStickyTTL),
+	}, nil
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +169,18 @@ type attemptInfo struct {
 }
 
 func logRequest(w io.Writer, r *http.Request, p float64, plan engine.Plan, resp *http.Response) {
-	entry := logEntry{SessionID: stickySessionID(r), P: p, Model: plan.Primary.OpenRouterID, Provider: plan.Primary.Provider, FallbackHops: len(plan.Fallbacks), Status: resp.StatusCode, Attempts: []attemptInfo{{Model: plan.Primary.OpenRouterID, Status: resp.StatusCode}}}
+	entry := logEntry{
+		SessionID:    stickySessionID(r),
+		P:            p,
+		Model:        plan.Primary.OpenRouterID,
+		Provider:     plan.Primary.Provider,
+		FallbackHops: len(plan.Fallbacks),
+		Status:       resp.StatusCode,
+		Attempts: []attemptInfo{{
+			Model:  plan.Primary.OpenRouterID,
+			Status: resp.StatusCode,
+		}},
+	}
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return
@@ -206,6 +227,7 @@ type stickyStore struct {
 func newStickyStore(ttl time.Duration) *stickyStore {
 	return &stickyStore{ttl: ttl, data: make(map[string]stickyEntry)}
 }
+
 func (s *stickyStore) get(key string, p float64) (engine.Plan, bool) {
 	if key == "" {
 		return engine.Plan{}, false
@@ -221,6 +243,7 @@ func (s *stickyStore) get(key string, p float64) (engine.Plan, bool) {
 	s.data[key] = entry
 	return entry.plan, true
 }
+
 func (s *stickyStore) set(key string, p float64, plan engine.Plan) {
 	if key == "" {
 		return
@@ -236,6 +259,7 @@ func stickySessionID(r *http.Request) string {
 	}
 	return ""
 }
+
 func stickySessionKey(r *http.Request, payload map[string]any, p float64) string {
 	if v := strings.TrimSpace(r.Header.Get("X-Session-Id")); v != "" {
 		return fmt.Sprintf("session:%s:p:%g", v, p)
@@ -246,6 +270,7 @@ func stickySessionKey(r *http.Request, payload map[string]any, p float64) string
 	}
 	return fmt.Sprintf("fingerprint:%s:p:%g", fp, p)
 }
+
 func conversationFingerprint(payload map[string]any) string {
 	messages, ok := payload["messages"].([]any)
 	if !ok {
