@@ -77,6 +77,7 @@ func Serve(args []string, stdout, stderr io.Writer) int {
 		OpenRouterKey: key,
 		Referer:       "https://github.com/vegerot/coding-model-router",
 		Title:         "coding-model-router",
+		Logger:        stdout,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "router: %v\n", err)
