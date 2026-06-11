@@ -1,6 +1,7 @@
 package proxy_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,8 +13,6 @@ import (
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
 
-// mappedSnapshot is a small mapped (OpenRouterID-bearing) candidate set.
-// Normalized coding quality over {30,50,90}: cheap=0.00, mid=0.33, top=1.00.
 func mappedSnapshot() *snapshot.Snapshot {
 	return &snapshot.Snapshot{
 		SchemaVersion: snapshot.SchemaVersion,
@@ -26,37 +25,36 @@ func mappedSnapshot() *snapshot.Snapshot {
 	}
 }
 
-// capture records what the fake upstream saw.
 type capture struct {
 	calls int
 	model string
 	auth  string
+	head  string
 }
 
-// fakeUpstream serves a fake OpenRouter. respond writes the upstream response.
-func fakeUpstream(t *testing.T, cap *capture, respond func(w http.ResponseWriter)) *httptest.Server {
+func fakeUpstream(t *testing.T, cap *capture, respond func(w http.ResponseWriter, r *http.Request)) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cap.calls++
 		cap.auth = r.Header.Get("Authorization")
+		cap.head = r.Header.Get("X-Session-Id")
 		body, _ := io.ReadAll(r.Body)
 		var m map[string]any
 		_ = json.Unmarshal(body, &m)
 		if s, ok := m["model"].(string); ok {
 			cap.model = s
 		}
-		respond(w)
+		respond(w, r)
 	}))
 }
 
-func newProxy(t *testing.T, snap *snapshot.Snapshot, upstream string) *httptest.Server {
+func newProxy(t *testing.T, snap *snapshot.Snapshot, upstream string, opts ...func(*proxy.Config)) *httptest.Server {
 	t.Helper()
-	srv, err := proxy.NewServer(proxy.Config{
-		Snapshot:      snap,
-		DefaultP:      0.67,
-		OpenRouterKey: "test-key",
-		UpstreamBase:  upstream,
-	})
+	cfg := proxy.Config{Snapshot: snap, DefaultP: 0.67, OpenRouterKey: "test-key", UpstreamBase: upstream}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	srv, err := proxy.NewServer(cfg)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -82,7 +80,7 @@ func post(t *testing.T, url, body string, headers map[string]string) *http.Respo
 
 func TestServeRoutesAndRewritesModel(t *testing.T) {
 	var cap capture
-	up := fakeUpstream(t, &cap, func(w http.ResponseWriter) {
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"id":"x","model":"test/top"}`)
 	})
@@ -97,7 +95,7 @@ func TestServeRoutesAndRewritesModel(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	if cap.model != "test/top" {
-		t.Errorf("upstream model = %q, want test/top (p=0.8 picks the only qualifier)", cap.model)
+		t.Errorf("upstream model = %q, want test/top", cap.model)
 	}
 	if cap.auth != "Bearer test-key" {
 		t.Errorf("upstream auth = %q, want injected Bearer test-key", cap.auth)
@@ -110,12 +108,11 @@ func TestServeRoutesAndRewritesModel(t *testing.T) {
 
 func TestServePicksCheapestAboveFloor(t *testing.T) {
 	var cap capture
-	up := fakeUpstream(t, &cap, func(w http.ResponseWriter) { io.WriteString(w, `{}`) })
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
 	defer up.Close()
 	px := newProxy(t, mappedSnapshot(), up.URL)
 	defer px.Close()
 
-	// At p=0.3, both mid (0.33) and top (1.0) qualify; cheapest is mid.
 	resp := post(t, px.URL, `{"model":"pareto@0.3","messages":[]}`, nil)
 	resp.Body.Close()
 	if cap.model != "test/mid" {
@@ -125,7 +122,7 @@ func TestServePicksCheapestAboveFloor(t *testing.T) {
 
 func TestServeForwardsClientAuthorization(t *testing.T) {
 	var cap capture
-	up := fakeUpstream(t, &cap, func(w http.ResponseWriter) { io.WriteString(w, `{}`) })
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
 	defer up.Close()
 	px := newProxy(t, mappedSnapshot(), up.URL)
 	defer px.Close()
@@ -141,7 +138,7 @@ func TestServeForwardsClientAuthorization(t *testing.T) {
 
 func TestServePassesThroughNonParetoModel(t *testing.T) {
 	var cap capture
-	up := fakeUpstream(t, &cap, func(w http.ResponseWriter) { io.WriteString(w, `{}`) })
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
 	defer up.Close()
 	px := newProxy(t, mappedSnapshot(), up.URL)
 	defer px.Close()
@@ -155,7 +152,7 @@ func TestServePassesThroughNonParetoModel(t *testing.T) {
 
 func TestServeRejectsMalformedKnobWithoutCallingUpstream(t *testing.T) {
 	var cap capture
-	up := fakeUpstream(t, &cap, func(w http.ResponseWriter) { io.WriteString(w, `{}`) })
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
 	defer up.Close()
 	px := newProxy(t, mappedSnapshot(), up.URL)
 	defer px.Close()
@@ -173,7 +170,7 @@ func TestServeRejectsMalformedKnobWithoutCallingUpstream(t *testing.T) {
 func TestServeStreamsSSE(t *testing.T) {
 	chunks := []string{"data: {\"a\":1}\n\n", "data: {\"b\":2}\n\n", "data: [DONE]\n\n"}
 	var cap capture
-	up := fakeUpstream(t, &cap, func(w http.ResponseWriter) {
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		fl, _ := w.(http.Flusher)
@@ -204,9 +201,8 @@ func TestServeStreamsSSE(t *testing.T) {
 
 func TestServeReturns502WhenNoCandidateQualifies(t *testing.T) {
 	var cap capture
-	up := fakeUpstream(t, &cap, func(w http.ResponseWriter) { io.WriteString(w, `{}`) })
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
 	defer up.Close()
-	// Empty mapped snapshot → engine has no candidates.
 	empty := &snapshot.Snapshot{SchemaVersion: snapshot.SchemaVersion, Attribution: snapshot.Attribution}
 	px := newProxy(t, empty, up.URL)
 	defer px.Close()
@@ -224,5 +220,23 @@ func TestServeReturns502WhenNoCandidateQualifies(t *testing.T) {
 func TestNewServerRejectsNilSnapshot(t *testing.T) {
 	if _, err := proxy.NewServer(proxy.Config{}); err == nil {
 		t.Error("expected error for nil snapshot")
+	}
+}
+
+func TestServerLogsStructuredRequest(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
+	defer up.Close()
+	var log bytes.Buffer
+	px := newProxy(t, mappedSnapshot(), up.URL, func(cfg *proxy.Config) { cfg.Logger = &log })
+	defer px.Close()
+
+	resp := post(t, px.URL, `{"model":"pareto@0.8","messages":[]}`, map[string]string{"X-Session-Id": "sess-1"})
+	resp.Body.Close()
+	if !strings.Contains(log.String(), `"session_id":"sess-1"`) {
+		t.Fatalf("log missing session_id: %s", log.String())
+	}
+	if !strings.Contains(log.String(), `"p":0.8`) {
+		t.Fatalf("log missing p: %s", log.String())
 	}
 }

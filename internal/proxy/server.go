@@ -17,19 +17,17 @@ const (
 	chatCompletionsPath = "/v1/chat/completions"
 )
 
-// Config configures a Server. Snapshot is required and must already be mapped
-// (every candidate carries an OpenRouterID); see mapping.MappedSnapshot.
 type Config struct {
-	Snapshot      *snapshot.Snapshot // mapped candidate set (required)
-	DefaultP      float64            // floor for a bare "pareto" model name
-	OpenRouterKey string             // injected when the client sends no Authorization
-	UpstreamBase  string             // default "https://openrouter.ai/api/v1"
-	Client        *http.Client       // nil → http.DefaultClient
-	Referer       string             // OpenRouter attribution: HTTP-Referer
-	Title         string             // OpenRouter attribution: X-Title
+	Snapshot      *snapshot.Snapshot
+	DefaultP      float64
+	OpenRouterKey string
+	UpstreamBase  string
+	Client        *http.Client
+	Referer       string
+	Title         string
+	Logger        io.Writer
 }
 
-// Server is the OpenAI-compatible proxy handler.
 type Server struct {
 	snapshot      *snapshot.Snapshot
 	defaultP      float64
@@ -38,9 +36,9 @@ type Server struct {
 	client        *http.Client
 	referer       string
 	title         string
+	logger        io.Writer
 }
 
-// NewServer validates the config and returns a ready Server.
 func NewServer(cfg Config) (*Server, error) {
 	if cfg.Snapshot == nil {
 		return nil, errors.New("proxy: nil snapshot")
@@ -53,25 +51,14 @@ func NewServer(cfg Config) (*Server, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &Server{
-		snapshot:      cfg.Snapshot,
-		defaultP:      cfg.DefaultP,
-		openRouterKey: cfg.OpenRouterKey,
-		upstreamBase:  strings.TrimRight(base, "/"),
-		client:        client,
-		referer:       cfg.Referer,
-		title:         cfg.Title,
-	}, nil
+	return &Server{snapshot: cfg.Snapshot, defaultP: cfg.DefaultP, openRouterKey: cfg.OpenRouterKey, upstreamBase: strings.TrimRight(base, "/"), client: client, referer: cfg.Referer, title: cfg.Title, logger: cfg.Logger}, nil
 }
 
-// ServeHTTP routes POST /v1/chat/completions: parse the knob, (optionally)
-// select a model and rewrite the model field, then forward to OpenRouter.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != chatCompletionsPath || r.Method != http.MethodPost {
 		writeError(w, http.StatusNotFound, "not found: only POST "+chatCompletionsPath+" is served")
 		return
 	}
-
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "read request body: "+err.Error())
@@ -83,36 +70,47 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model, _ := payload["model"].(string)
-
 	decision, err := ParseKnob(model, r.Header.Get("X-Pareto-P"), s.defaultP)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	outBody := body
+	plan := engine.Plan{}
 	if decision.Route {
-		plan, err := engine.Select(s.snapshot, decision.P, engine.Options{})
+		plan, err = engine.Select(s.snapshot, decision.P, engine.Options{})
 		if err != nil {
 			writeError(w, http.StatusBadGateway, "model selection failed: "+err.Error())
 			return
 		}
 		payload["model"] = plan.Primary.OpenRouterID
-		outBody, err = json.Marshal(payload)
+		body, err = json.Marshal(payload)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "re-encode request: "+err.Error())
 			return
 		}
 	}
 
-	s.forward(w, r, outBody)
+	resp, err := s.forward(r, body)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if s.logger != nil {
+		logRequest(s.logger, r, decision.P, plan, resp)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	w.WriteHeader(resp.StatusCode)
+	streamBody(w, resp.Body)
 }
 
-func (s *Server) forward(w http.ResponseWriter, r *http.Request, body []byte) {
+func (s *Server) forward(r *http.Request, body []byte) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, s.upstreamBase+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "build upstream request: "+err.Error())
-		return
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if auth := r.Header.Get("Authorization"); auth != "" {
@@ -126,23 +124,36 @@ func (s *Server) forward(w http.ResponseWriter, r *http.Request, body []byte) {
 	if s.title != "" {
 		req.Header.Set("X-Title", s.title)
 	}
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "upstream request failed: "+err.Error())
-		return
+	if sessionID := strings.TrimSpace(r.Header.Get("X-Session-Id")); sessionID != "" {
+		req.Header.Set("X-Session-Id", sessionID)
 	}
-	defer resp.Body.Close()
-
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
-	w.WriteHeader(resp.StatusCode)
-	streamBody(w, resp.Body)
+	return s.client.Do(req)
 }
 
-// streamBody copies the upstream body to the client, flushing after each read so
-// SSE chunks reach the client as they arrive.
+type logEntry struct {
+	SessionID    string        `json:"session_id,omitempty"`
+	P            float64       `json:"p"`
+	Model        string        `json:"model,omitempty"`
+	Provider     string        `json:"provider,omitempty"`
+	FallbackHops int           `json:"fallback_hops"`
+	Status       int           `json:"status"`
+	Attempts     []attemptInfo `json:"attempts,omitempty"`
+}
+
+type attemptInfo struct {
+	Model  string `json:"model"`
+	Status int    `json:"status"`
+}
+
+func logRequest(w io.Writer, r *http.Request, p float64, plan engine.Plan, resp *http.Response) {
+	entry := logEntry{SessionID: stickySessionID(r), P: p, Model: plan.Primary.OpenRouterID, Provider: plan.Primary.Provider, FallbackHops: len(plan.Fallbacks), Status: resp.StatusCode, Attempts: []attemptInfo{{Model: plan.Primary.OpenRouterID, Status: resp.StatusCode}}}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	_, _ = w.Write(append(data, '\n'))
+}
+
 func streamBody(w http.ResponseWriter, body io.Reader) {
 	flusher, _ := w.(http.Flusher)
 	buf := make([]byte, 4096)
@@ -165,10 +176,12 @@ func streamBody(w http.ResponseWriter, body io.Reader) {
 func writeError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]any{
-			"message": msg,
-			"type":    "router_error",
-		},
-	})
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": msg, "type": "router_error"}})
+}
+
+func stickySessionID(r *http.Request) string {
+	if v := strings.TrimSpace(r.Header.Get("X-Session-Id")); v != "" {
+		return v
+	}
+	return ""
 }
