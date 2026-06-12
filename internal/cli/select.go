@@ -23,7 +23,7 @@ func Select(args []string, stdout, stderr io.Writer) int {
 		doRefresh      = fs.Bool("refresh", false, "force a re-fetch even if a cached snapshot exists")
 		asJSON         = fs.Bool("json", false, "emit the selection plan as JSON instead of a table")
 		cachePath      = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		apiKey         = fs.String("api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		apiKey         = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		mappedOnly     = fs.Bool("mapped-only", false, "select only candidates that resolve to OpenRouter model IDs")
 		openRouterPath = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)

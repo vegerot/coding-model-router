@@ -62,7 +62,7 @@ Usage:
       Resolve snapshot candidates to OpenRouter model IDs.
 
   router serve [--addr ADDR] [--p P] [--refresh] [--cache PATH]
-               [--openrouter-cache PATH] [--openrouter-key KEY] [--api-key KEY]
+               [--openrouter-cache PATH] [--openrouter-key KEY] [--aa-api-key KEY]
       Run the OpenAI-compatible proxy. POST /v1/chat/completions with
       model "pareto" or "pareto@P" (or an X-Pareto-P header) to route to the
       cheapest mapped model at or above P; other model names pass through.

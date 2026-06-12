@@ -122,6 +122,21 @@ func TestSnapshotNoCacheNoKeyExits1(t *testing.T) {
 	}
 }
 
+func TestSnapshotAcceptsAAAPIKeyFlag(t *testing.T) {
+	t.Setenv("AA_API_KEY", "")
+	path := filepath.Join(t.TempDir(), "snapshot.json")
+	seedSnapshot(t, path)
+
+	var out, errOut bytes.Buffer
+	code := cli.Snapshot([]string{"--aa-api-key", "test-key", "--cache", path}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, errOut.String())
+	}
+	if out.Len() == 0 {
+		t.Fatal("expected snapshot output")
+	}
+}
+
 func TestSnapshotNormColumn(t *testing.T) {
 	t.Setenv("AA_API_KEY", "")
 	path := filepath.Join(t.TempDir(), "snapshot.json")

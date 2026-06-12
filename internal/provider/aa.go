@@ -88,7 +88,7 @@ type aaModelJSON struct {
 // Fetch implements Provider, paging through the free endpoint.
 func (p *AA) Fetch(ctx context.Context, client *http.Client) ([]Model, error) {
 	if p.apiKey == "" {
-		return nil, errors.New("aa: API key is required (set AA_API_KEY or pass --api-key)")
+		return nil, errors.New("aa: API key is required (set AA_API_KEY or pass --aa-api-key)")
 	}
 	if client == nil {
 		client = http.DefaultClient

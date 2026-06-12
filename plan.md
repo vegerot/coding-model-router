@@ -61,8 +61,8 @@ M4 and later.
   fallback (`stale=true`) on failure. Tests-first in `*_test`; live end-to-end
   test passes (**331 candidates from 507 raw models**).
 - [x] **M1.5 — `internal/cli` + `cmd/router`.** `cli.Snapshot` implements
-  `router snapshot [--refresh] [--json] [--cache PATH] [--api-key KEY]`: API key
-  from `--api-key` else `$AA_API_KEY`; cache + no `--refresh` → print from cache
+  `router snapshot [--refresh] [--json] [--cache PATH] [--aa-api-key KEY]`: API key
+  from `--aa-api-key` else `$AA_API_KEY`; cache + no `--refresh` → print from cache
   (no network), else fetch via `provider.NewAA` + `refresh.Refresh` and cache;
   `--json` → raw JSON; `text/tabwriter` table sorted cheapest-first
   (`MODEL·QUALITY·NORM·$/1M·IN$·OUT$·PROVIDER`) + summary + **always-printed AA
@@ -77,7 +77,7 @@ M4 and later.
   monotonic non-decreasing cost as p rises, dominated models never chosen,
   single-candidate behavior, fallback ordering, and invalid input errors.
 - [x] **M2.1 — CLI selection.** `router select [--p P] [--refresh] [--json]
-  [--cache PATH] [--api-key KEY]` loads the cached/refreshed snapshot, calls
+  [--cache PATH] [--aa-api-key KEY]` loads the cached/refreshed snapshot, calls
   `engine.Select`, and prints the selected primary plus ordered fallbacks.
   JSON output includes the plan, snapshot source metadata, fetch time, and AA
   attribution.

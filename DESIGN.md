@@ -147,7 +147,7 @@ and `prompt_tokens`/`completion_tokens`, under Apache-2.0.
   needed only for routing. With a free AA key, M3 maps AA slug/name to
   OpenRouter ID dynamically from OpenRouter's live catalog; with a future Pro key
   the field can be used in-band. The snapshot is keyed by AA `slug`.
-- The API key is read from `$AA_API_KEY` (or `--api-key`); it is never logged or
+- The API key is read from `$AA_API_KEY` (or `--aa-api-key`); it is never logged or
   committed (`.gitignore`d).
 
 ## Data layer (M1)
