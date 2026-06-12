@@ -72,22 +72,39 @@ func NewServer(cfg Config) (*Server, error) {
 	}, nil
 }
 
-type RequestPayload struct {
-	Model    string        `json:"model"`
-	Messages []Message     `json:"messages"`
-	Usage    *UsageOptions `json:"usage,omitempty"`
-	Stream   bool          `json:"stream,omitempty"`
-	// Keep unknown fields to pass through to OpenRouter
-	UnknownFields map[string]any `json:"-"`
+type requestPayload struct {
+	Model    string
+	Messages []message
 }
 
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+type message struct {
+	Role    string
+	Content string
 }
 
-type UsageOptions struct {
-	Include bool `json:"include"`
+func (m *message) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Role    json.RawMessage `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+	_ = json.Unmarshal(raw.Role, &m.Role)
+	_ = json.Unmarshal(raw.Content, &m.Content)
+	return nil
+}
+
+func parseRequestPayload(body []byte) requestPayload {
+	var raw struct {
+		Model    json.RawMessage `json:"model"`
+		Messages []message       `json:"messages"`
+	}
+	_ = json.Unmarshal(body, &raw)
+	var payload requestPayload
+	_ = json.Unmarshal(raw.Model, &payload.Model)
+	payload.Messages = raw.Messages
+	return payload
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -107,20 +124,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var reqPayload RequestPayload
-	if err := json.Unmarshal(body, &reqPayload); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
-		return
-	}
+	reqPayload := parseRequestPayload(body)
 
-	if reqPayload.Usage == nil {
-		payload["usage"] = map[string]any{"include": true}
-	} else {
-		usageMap, _ := payload["usage"].(map[string]any)
-		if usageMap != nil {
-			usageMap["include"] = true
-		}
+	usageMap, ok := payload["usage"].(map[string]any)
+	if !ok {
+		usageMap = map[string]any{}
+		payload["usage"] = usageMap
 	}
+	usageMap["include"] = true
 
 	decision, err := ParseKnob(reqPayload.Model, r.Header.Get("X-Pareto-P"), s.defaultP)
 	if err != nil {
@@ -158,7 +169,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	streamBody(w, resp.Body)
 }
 
-func (s *Server) selectPlan(r *http.Request, reqPayload RequestPayload, p float64) (engine.Plan, error) {
+func (s *Server) selectPlan(r *http.Request, reqPayload requestPayload, p float64) (engine.Plan, error) {
 	key, has_sticky_key := stickySessionKey(r, reqPayload, p)
 	if has_sticky_key {
 		if cached, ok := s.stickies.get(key, p); ok {
@@ -318,7 +329,7 @@ func stickySessionID(r *http.Request) string {
 	return ""
 }
 
-func stickySessionKey(r *http.Request, reqPayload RequestPayload, p float64) (string, bool) {
+func stickySessionKey(r *http.Request, reqPayload requestPayload, p float64) (string, bool) {
 	if v := strings.TrimSpace(r.Header.Get("X-Session-Id")); v != "" {
 		return fmt.Sprintf("session:%s:p:%g", v, p), true
 	}
@@ -329,7 +340,7 @@ func stickySessionKey(r *http.Request, reqPayload RequestPayload, p float64) (st
 	return fmt.Sprintf("fingerprint:%s:p:%g", fp, p), true
 }
 
-func conversationFingerprint(reqPayload RequestPayload) (string, bool) {
+func conversationFingerprint(reqPayload requestPayload) (string, bool) {
 	if len(reqPayload.Messages) == 0 {
 		return "", false
 	}

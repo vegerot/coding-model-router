@@ -289,6 +289,30 @@ func TestServeStreamsSSE(t *testing.T) {
 	}
 }
 
+func TestServeRoutesMultimodalArrayContent(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
+	defer up.Close()
+	px := newProxy(t, mappedSnapshot(), up.URL)
+	defer px.Close()
+
+	body := `{"model":"pareto@0.0","messages":[{"role":"system","content":"sys"},{"role":"user","content":[{"type":"text","text":"hi"},{"type":"image_url","image_url":{"url":"data:image/png;base64,xx"}}]}]}`
+	resp := post(t, px.URL, body, nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if cap.model != "test/cheap" {
+		t.Errorf("upstream model = %q, want test/cheap", cap.model)
+	}
+
+	resp2 := post(t, px.URL, body, nil)
+	resp2.Body.Close()
+	if cap.model != "test/cheap" {
+		t.Errorf("sticky model = %q, want test/cheap", cap.model)
+	}
+}
+
 func TestServeRequestsOpenRouterUsageCost(t *testing.T) {
 	var cap capture
 	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
