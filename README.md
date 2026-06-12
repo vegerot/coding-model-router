@@ -5,12 +5,12 @@ A Pareto-style coding-model router with a **single continuous quality knob** `p 
 Instead of OpenRouter's `pareto-code` (a curated shortlist + three coarse quality tiers), this router:
 
 1. **Continuous knob, not tiers.** `p` is a quality floor; the router picks the **cheapest model at or above the floor**. `p=0` → cheapest model overall; `p=1` → the top-ranked model regardless of cost. Every choice is automatically Pareto-optimal.
-2. **Full leaderboard.** Candidates come from Artificial Analysis's model-level coding index, not a hand-picked subset.
+2. **Full leaderboard.** Candidates come from Artificial Analysis's Coding Agent Index when available, with Data API coding scores as fallback, not a hand-picked subset.
 3. **Honest V1 cost.** Each model's cost axis is a single Artificial Analysis in-band blended price: `(3*input + output)/4` per 1M tokens.
 
 ## Status
 
-Under construction. **M0–M4 are complete**: the data layer builds a validated cached snapshot, filters out models below coding index `20.0` before normalization, the pure routing engine selects the cheapest model at or above a continuous quality floor, M3 dynamically resolves AA candidates to OpenRouter model IDs, and M4 serves an OpenAI-compatible proxy that routes `pareto@p` requests to OpenRouter.
+Under construction. **M0–M4 are complete**: the data layer builds a validated cached snapshot, filters out models below quality score `20.0` before normalization, the pure routing engine selects the cheapest model at or above a continuous quality floor, M3 dynamically resolves AA candidates to OpenRouter model IDs, and M4 serves an OpenAI-compatible proxy that routes `pareto@p` requests to OpenRouter.
 
 ```sh
 make build
