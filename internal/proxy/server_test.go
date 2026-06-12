@@ -60,6 +60,13 @@ type capture struct {
 	usageInclude bool
 }
 
+type upstreamPayload struct {
+	Model string `json:"model"`
+	Usage struct {
+		Include bool `json:"include"`
+	} `json:"usage"`
+}
+
 func fakeUpstream(t *testing.T, cap *capture, respond func(w http.ResponseWriter, r *http.Request)) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,14 +77,10 @@ func fakeUpstream(t *testing.T, cap *capture, respond func(w http.ResponseWriter
 		if err != nil {
 			t.Fatalf("read body: %v", err)
 		}
-		var m map[string]any
+		var m upstreamPayload
 		_ = json.Unmarshal(body, &m)
-		if s, ok := m["model"].(string); ok {
-			cap.model = s
-		}
-		if usage, ok := m["usage"].(map[string]any); ok {
-			cap.usageInclude, _ = usage["include"].(bool)
-		}
+		cap.model = m.Model
+		cap.usageInclude = m.Usage.Include
 		respond(w, r)
 	}))
 }

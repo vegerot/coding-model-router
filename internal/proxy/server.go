@@ -72,6 +72,24 @@ func NewServer(cfg Config) (*Server, error) {
 	}, nil
 }
 
+type RequestPayload struct {
+	Model    string        `json:"model"`
+	Messages []Message     `json:"messages"`
+	Usage    *UsageOptions `json:"usage,omitempty"`
+	Stream   bool          `json:"stream,omitempty"`
+	// Keep unknown fields to pass through to OpenRouter
+	UnknownFields map[string]any `json:"-"`
+}
+
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type UsageOptions struct {
+	Include bool `json:"include"`
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != chatCompletionsPath || r.Method != http.MethodPost {
 		writeError(w, http.StatusNotFound, "not found: only POST "+chatCompletionsPath+" is served")
@@ -82,25 +100,35 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "read request body: "+err.Error())
 		return
 	}
+
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	model, _ := payload["model"].(string)
-	usage, _ := payload["usage"].(map[string]any)
-	if usage == nil {
-		usage = map[string]any{}
-		payload["usage"] = usage
+
+	var reqPayload RequestPayload
+	if err := json.Unmarshal(body, &reqPayload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
 	}
-	usage["include"] = true
-	decision, err := ParseKnob(model, r.Header.Get("X-Pareto-P"), s.defaultP)
+
+	if reqPayload.Usage == nil {
+		payload["usage"] = map[string]any{"include": true}
+	} else {
+		usageMap, _ := payload["usage"].(map[string]any)
+		if usageMap != nil {
+			usageMap["include"] = true
+		}
+	}
+
+	decision, err := ParseKnob(reqPayload.Model, r.Header.Get("X-Pareto-P"), s.defaultP)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	plan, err := s.selectPlan(r, payload, decision.P)
+	plan, err := s.selectPlan(r, reqPayload, decision.P)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "model selection failed: "+err.Error())
 		return
@@ -130,8 +158,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	streamBody(w, resp.Body)
 }
 
-func (s *Server) selectPlan(r *http.Request, payload map[string]any, p float64) (engine.Plan, error) {
-	key, has_sticky_key := stickySessionKey(r, payload, p)
+func (s *Server) selectPlan(r *http.Request, reqPayload RequestPayload, p float64) (engine.Plan, error) {
+	key, has_sticky_key := stickySessionKey(r, reqPayload, p)
 	if has_sticky_key {
 		if cached, ok := s.stickies.get(key, p); ok {
 			return cached, nil
@@ -290,44 +318,28 @@ func stickySessionID(r *http.Request) string {
 	return ""
 }
 
-func stickySessionKey(r *http.Request, payload map[string]any, p float64) (string, bool) {
+func stickySessionKey(r *http.Request, reqPayload RequestPayload, p float64) (string, bool) {
 	if v := strings.TrimSpace(r.Header.Get("X-Session-Id")); v != "" {
 		return fmt.Sprintf("session:%s:p:%g", v, p), true
 	}
-	fp, ok := conversationFingerprint(payload)
+	fp, ok := conversationFingerprint(reqPayload)
 	if !ok {
 		return "", false
 	}
 	return fmt.Sprintf("fingerprint:%s:p:%g", fp, p), true
 }
 
-func conversationFingerprint(payload map[string]any) (string, bool) {
-	messages, ok := payload["messages"].([]any)
-	if !ok {
+func conversationFingerprint(reqPayload RequestPayload) (string, bool) {
+	if len(reqPayload.Messages) == 0 {
 		return "", false
 	}
 	var systemMsg, userMsg string
-	for _, raw := range messages {
-		msg, ok := raw.(map[string]any)
-		if !ok {
-			log.Printf("proxy: message is not an object: %#v", raw)
-			continue
-		}
-		role, ok := msg["role"].(string)
-		if !ok {
-			log.Printf("proxy: message missing role or role is not a string: %#v", msg)
-			continue
-		}
-		content, ok := msg["content"].(string)
-		if !ok {
-			log.Printf("proxy: message missing content or content is not a string: %#v", msg)
-			continue
-		}
+	for _, msg := range reqPayload.Messages {
 		switch {
-		case role == "system" && systemMsg == "":
-			systemMsg = content
-		case role == "user" && userMsg == "":
-			userMsg = content
+		case msg.Role == "system" && systemMsg == "":
+			systemMsg = msg.Content
+		case msg.Role == "user" && userMsg == "":
+			userMsg = msg.Content
 		}
 		if systemMsg != "" && userMsg != "" {
 			break
