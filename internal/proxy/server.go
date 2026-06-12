@@ -72,41 +72,6 @@ func NewServer(cfg Config) (*Server, error) {
 	}, nil
 }
 
-type requestPayload struct {
-	Model    string
-	Messages []message
-}
-
-type message struct {
-	Role    string
-	Content string
-}
-
-func (m *message) UnmarshalJSON(data []byte) error {
-	var raw struct {
-		Role    json.RawMessage `json:"role"`
-		Content json.RawMessage `json:"content"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil
-	}
-	_ = json.Unmarshal(raw.Role, &m.Role)
-	_ = json.Unmarshal(raw.Content, &m.Content)
-	return nil
-}
-
-func parseRequestPayload(body []byte) requestPayload {
-	var raw struct {
-		Model    json.RawMessage `json:"model"`
-		Messages []message       `json:"messages"`
-	}
-	_ = json.Unmarshal(body, &raw)
-	var payload requestPayload
-	_ = json.Unmarshal(raw.Model, &payload.Model)
-	payload.Messages = raw.Messages
-	return payload
-}
-
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != chatCompletionsPath || r.Method != http.MethodPost {
 		writeError(w, http.StatusNotFound, "not found: only POST "+chatCompletionsPath+" is served")
@@ -124,7 +89,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqPayload := parseRequestPayload(body)
+	model, _ := payload["model"].(string)
 
 	usageMap, ok := payload["usage"].(map[string]any)
 	if !ok {
@@ -133,18 +98,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	usageMap["include"] = true
 
-	decision, err := ParseKnob(reqPayload.Model, r.Header.Get("X-Pareto-P"), s.defaultP)
+	decision, err := ParseKnob(model, r.Header.Get("X-Pareto-P"), s.defaultP)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	plan, err := s.selectPlan(r, reqPayload, decision.P)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "model selection failed: "+err.Error())
-		return
-	}
+	plan := engine.Plan{}
 	if decision.Route {
+		plan, err = s.selectPlan(r, payload, decision.P)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "model selection failed: "+err.Error())
+			return
+		}
 		payload["model"] = plan.Primary.OpenRouterID
 		body, err = json.Marshal(payload)
 		if err != nil {
@@ -160,7 +126,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	if s.logger != nil {
-		logRequest(s.logger, r, decision.P, plan, resp)
+		logRequest(s.logger, r, decision.P, model, plan, resp)
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
@@ -169,9 +135,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	streamBody(w, resp.Body)
 }
 
-func (s *Server) selectPlan(r *http.Request, reqPayload requestPayload, p float64) (engine.Plan, error) {
-	key, has_sticky_key := stickySessionKey(r, reqPayload, p)
-	if has_sticky_key {
+func (s *Server) selectPlan(r *http.Request, payload map[string]any, p float64) (engine.Plan, error) {
+	key, hasStickyKey := stickySessionKey(r, payload, p)
+	if hasStickyKey {
 		if cached, ok := s.stickies.get(key, p); ok {
 			return cached, nil
 		}
@@ -180,7 +146,7 @@ func (s *Server) selectPlan(r *http.Request, reqPayload requestPayload, p float6
 	if err != nil {
 		return engine.Plan{}, err
 	}
-	if has_sticky_key {
+	if hasStickyKey {
 		s.stickies.set(key, p, plan)
 	}
 	return plan, nil
@@ -225,18 +191,28 @@ type attemptInfo struct {
 	Status int    `json:"status"`
 }
 
-func logRequest(w io.Writer, r *http.Request, p float64, plan engine.Plan, resp *http.Response) {
+func logRequest(w io.Writer, r *http.Request, p float64, requestModel string, plan engine.Plan, resp *http.Response) {
+	model := requestModel
+	provider := ""
+	fallbackHops := 0
+	attempts := []attemptInfo(nil)
+	if plan.Primary.OpenRouterID != "" {
+		model = plan.Primary.OpenRouterID
+		provider = plan.Primary.Provider
+		fallbackHops = len(plan.Fallbacks)
+		attempts = []attemptInfo{{
+			Model:  plan.Primary.OpenRouterID,
+			Status: resp.StatusCode,
+		}}
+	}
 	entry := logEntry{
 		SessionID:    stickySessionID(r),
 		P:            p,
-		Model:        plan.Primary.OpenRouterID,
-		Provider:     plan.Primary.Provider,
-		FallbackHops: len(plan.Fallbacks),
+		Model:        model,
+		Provider:     provider,
+		FallbackHops: fallbackHops,
 		Status:       resp.StatusCode,
-		Attempts: []attemptInfo{{
-			Model:  plan.Primary.OpenRouterID,
-			Status: resp.StatusCode,
-		}},
+		Attempts:     attempts,
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -329,36 +305,43 @@ func stickySessionID(r *http.Request) string {
 	return ""
 }
 
-func stickySessionKey(r *http.Request, reqPayload requestPayload, p float64) (string, bool) {
+func stickySessionKey(r *http.Request, payload map[string]any, p float64) (string, bool) {
 	if v := strings.TrimSpace(r.Header.Get("X-Session-Id")); v != "" {
 		return fmt.Sprintf("session:%s:p:%g", v, p), true
 	}
-	fp, ok := conversationFingerprint(reqPayload)
-	if !ok {
+	fp := conversationFingerprint(payload)
+	if fp == "" {
 		return "", false
 	}
 	return fmt.Sprintf("fingerprint:%s:p:%g", fp, p), true
 }
 
-func conversationFingerprint(reqPayload requestPayload) (string, bool) {
-	if len(reqPayload.Messages) == 0 {
-		return "", false
+func conversationFingerprint(payload map[string]any) string {
+	messages, ok := payload["messages"].([]any)
+	if !ok {
+		return ""
 	}
 	var systemMsg, userMsg string
-	for _, msg := range reqPayload.Messages {
+	for _, raw := range messages {
+		msg, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := msg["role"].(string)
+		content, _ := msg["content"].(string)
 		switch {
-		case msg.Role == "system" && systemMsg == "":
-			systemMsg = msg.Content
-		case msg.Role == "user" && userMsg == "":
-			userMsg = msg.Content
+		case role == "system" && systemMsg == "":
+			systemMsg = content
+		case role == "user" && userMsg == "":
+			userMsg = content
 		}
 		if systemMsg != "" && userMsg != "" {
 			break
 		}
 	}
 	if systemMsg == "" && userMsg == "" {
-		return "", false
+		return ""
 	}
 	h := sha256.Sum256([]byte(systemMsg + "\x00" + userMsg))
-	return hex.EncodeToString(h[:]), true
+	return hex.EncodeToString(h[:])
 }

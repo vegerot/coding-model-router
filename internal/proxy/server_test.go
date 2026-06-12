@@ -368,3 +368,21 @@ func TestServerLogsStructuredRequest(t *testing.T) {
 		t.Fatalf("log missing p: %s", log.String())
 	}
 }
+
+func TestServerLogsPassthroughModel(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
+	defer up.Close()
+	var log bytes.Buffer
+	px := newProxy(t, mappedSnapshot(), up.URL, func(cfg *proxy.Config) { cfg.Logger = &log })
+	defer px.Close()
+
+	resp := post(t, px.URL, `{"model":"openai/gpt-4o","messages":[]}`, nil)
+	resp.Body.Close()
+	if !strings.Contains(log.String(), `"model":"openai/gpt-4o"`) {
+		t.Fatalf("log missing passthrough model: %s", log.String())
+	}
+	if strings.Contains(log.String(), `"attempts"`) {
+		t.Fatalf("log has synthetic attempts for passthrough request: %s", log.String())
+	}
+}
