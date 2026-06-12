@@ -87,6 +87,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model, _ := payload["model"].(string)
+	usage, _ := payload["usage"].(map[string]any)
+	if usage == nil {
+		usage = map[string]any{}
+		payload["usage"] = usage
+	}
+	usage["include"] = true
 	decision, err := ParseKnob(model, r.Header.Get("X-Pareto-P"), s.defaultP)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

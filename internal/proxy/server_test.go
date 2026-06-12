@@ -53,10 +53,11 @@ func mappedSnapshot() *snapshot.Snapshot {
 }
 
 type capture struct {
-	calls int
-	model string
-	auth  string
-	head  string
+	calls        int
+	model        string
+	auth         string
+	head         string
+	usageInclude bool
 }
 
 func fakeUpstream(t *testing.T, cap *capture, respond func(w http.ResponseWriter, r *http.Request)) *httptest.Server {
@@ -70,6 +71,9 @@ func fakeUpstream(t *testing.T, cap *capture, respond func(w http.ResponseWriter
 		_ = json.Unmarshal(body, &m)
 		if s, ok := m["model"].(string); ok {
 			cap.model = s
+		}
+		if usage, ok := m["usage"].(map[string]any); ok {
+			cap.usageInclude, _ = usage["include"].(bool)
 		}
 		respond(w, r)
 	}))
@@ -273,6 +277,20 @@ func TestServeStreamsSSE(t *testing.T) {
 		if !strings.Contains(got, strings.TrimSpace(c)) {
 			t.Errorf("relayed stream missing %q\n---\n%s", c, got)
 		}
+	}
+}
+
+func TestServeRequestsOpenRouterUsageCost(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
+	defer up.Close()
+	px := newProxy(t, mappedSnapshot(), up.URL)
+	defer px.Close()
+
+	resp := post(t, px.URL, `{"model":"pareto@0.8","messages":[]}`, nil)
+	resp.Body.Close()
+	if cap.usageInclude != true {
+		t.Fatalf("upstream usage.include = %v, want true", cap.usageInclude)
 	}
 }
 
