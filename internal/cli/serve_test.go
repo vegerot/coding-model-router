@@ -34,3 +34,22 @@ func TestServeExitsWhenNoData(t *testing.T) {
 		t.Fatalf("expected non-zero exit when no snapshot/key is available")
 	}
 }
+
+func TestServeAcceptsOpenRouterAPIKeyFlag(t *testing.T) {
+	t.Setenv("AA_API_KEY", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
+	dir := t.TempDir()
+
+	var out, errOut bytes.Buffer
+	code := cli.Serve([]string{
+		"--openrouter-api-key", "test-key",
+		"--cache", filepath.Join(dir, "absent-snapshot.json"),
+		"--openrouter-cache", filepath.Join(dir, "absent-catalog.json"),
+	}, &out, &errOut)
+	if code == 0 {
+		t.Fatalf("expected non-zero exit when no snapshot/key is available")
+	}
+	if bytes.Contains(errOut.Bytes(), []byte("flag provided but not defined")) {
+		t.Fatalf("serve rejected the renamed flag: %s", errOut.String())
+	}
+}

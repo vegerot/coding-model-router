@@ -27,7 +27,7 @@ make build
 
 ### Using the proxy
 
-`router serve` loads the cached snapshot + OpenRouter catalog, resolves to the mapped candidate set, and serves `POST /v1/chat/completions`. Set the model to `pareto` (uses the default `p`, 0.67) or `pareto@P`, or send an `X-Pareto-P: P` header; the proxy picks the cheapest mapped model at or above `P` and forwards to OpenRouter. Any other model name passes through unchanged. The OpenRouter key comes from `--openrouter-key` or `$OPENROUTER_API_KEY` (a client-supplied `Authorization` header wins).
+`router serve` loads the cached snapshot + OpenRouter catalog, resolves to the mapped candidate set, and serves `POST /v1/chat/completions`. Set the model to `pareto` (uses the default `p`, 0.67) or `pareto@P`, or send an `X-Pareto-P: P` header; the proxy picks the cheapest mapped model at or above `P` and forwards to OpenRouter. Any other model name passes through unchanged. The OpenRouter key comes from `--openrouter-api-key` or `$OPENROUTER_API_KEY` (a client-supplied `Authorization` header wins).
 
 ```sh
 OPENROUTER_API_KEY=sk-or-... ./router serve &

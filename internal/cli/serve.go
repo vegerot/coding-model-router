@@ -24,7 +24,7 @@ func Serve(args []string, stdout, stderr io.Writer) int {
 		doRefresh      = fs.Bool("refresh", false, "refresh both snapshot and OpenRouter catalog caches")
 		cachePath      = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
 		apiKey         = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
-		openRouterKey  = fs.String("openrouter-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
+		openRouterKey  = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
 		openRouterPath = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)
 	if err := fs.Parse(args); err != nil {
@@ -68,7 +68,7 @@ func Serve(args []string, stdout, stderr io.Writer) int {
 		key = os.Getenv("OPENROUTER_API_KEY")
 	}
 	if key == "" {
-		fmt.Fprintln(stderr, "router: WARNING: no OpenRouter API key (set OPENROUTER_API_KEY or --openrouter-key); requests must supply their own Authorization header")
+		fmt.Fprintln(stderr, "router: WARNING: no OpenRouter API key (set OPENROUTER_API_KEY or --openrouter-api-key); requests must supply their own Authorization header")
 	}
 
 	srv, err := proxy.NewServer(proxy.Config{

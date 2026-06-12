@@ -105,7 +105,7 @@ M4 and later.
   body into a map (preserving all fields), runs `engine.Select` over the mapped
   snapshot, rewrites `model` to `Primary.OpenRouterID`, and forwards to OpenRouter
   with a flushing SSE passthrough. Auth: client `Authorization` wins, else inject
-  the key from `--openrouter-key`/`$OPENROUTER_API_KEY`; sends `HTTP-Referer` /
+  the key from `--openrouter-api-key`/`$OPENROUTER_API_KEY`; sends `HTTP-Referer` /
   `X-Title`. The CLI always resolves to `mapping.MappedSnapshot` first (a primary
   without an OpenRouter ID cannot be forwarded), so `p` is a floor over the mapped
   set. `models[]` fallback, stickiness, logging, and mid-stream-error reaction are
