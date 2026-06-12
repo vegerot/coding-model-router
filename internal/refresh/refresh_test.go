@@ -40,7 +40,13 @@ func manyValid(n int) []provider.Model {
 
 const fixedTime = "2026-06-09T12:00:00Z"
 
-func at() time.Time { t, _ := time.Parse(time.RFC3339, fixedTime); return t }
+func at() time.Time {
+	t, err := time.Parse(time.RFC3339, fixedTime)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
 
 func TestBuildFiltersAndComputes(t *testing.T) {
 	models := []provider.Model{

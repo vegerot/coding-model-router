@@ -205,7 +205,10 @@ func logRequest(w io.Writer, r *http.Request, p float64, plan engine.Plan, resp 
 }
 
 func streamBody(w http.ResponseWriter, body io.Reader) {
-	flusher, _ := w.(http.Flusher)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		log.Printf("proxy: response writer does not implement http.Flusher")
+	}
 	buf := make([]byte, 4096)
 	for {
 		n, readErr := body.Read(buf)
