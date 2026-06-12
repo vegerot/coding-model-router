@@ -255,6 +255,7 @@ var effortLabels = map[string]bool{
 	"reasoning":    true,
 	"non":          true,
 	"nonreasoning": true,
+	"it":           true,
 }
 
 func creatorMatchesProvider(creator, provider string) bool {
