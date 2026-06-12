@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -99,19 +100,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan := engine.Plan{}
+	plan, err := s.selectPlan(r, payload, decision.P)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "model selection failed: "+err.Error())
+		return
+	}
 	if decision.Route {
-		key := stickySessionKey(r, payload, decision.P)
-		if cached, ok := s.stickies.get(key, decision.P); ok {
-			plan = cached
-		} else {
-			plan, err = engine.Select(s.snapshot, decision.P, engine.Options{})
-			if err != nil {
-				writeError(w, http.StatusBadGateway, "model selection failed: "+err.Error())
-				return
-			}
-			s.stickies.set(key, decision.P, plan)
-		}
 		payload["model"] = plan.Primary.OpenRouterID
 		body, err = json.Marshal(payload)
 		if err != nil {
@@ -134,6 +128,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(resp.StatusCode)
 	streamBody(w, resp.Body)
+}
+
+func (s *Server) selectPlan(r *http.Request, payload map[string]any, p float64) (engine.Plan, error) {
+	key, has_sticky_key := stickySessionKey(r, payload, p)
+	if has_sticky_key {
+		if cached, ok := s.stickies.get(key, p); ok {
+			return cached, nil
+		}
+	}
+	plan, err := engine.Select(s.snapshot, p, engine.Options{})
+	if err != nil {
+		return engine.Plan{}, err
+	}
+	if has_sticky_key {
+		s.stickies.set(key, p, plan)
+	}
+	return plan, nil
 }
 
 func (s *Server) forward(r *http.Request, body []byte) (*http.Response, error) {
@@ -279,30 +290,39 @@ func stickySessionID(r *http.Request) string {
 	return ""
 }
 
-func stickySessionKey(r *http.Request, payload map[string]any, p float64) string {
+func stickySessionKey(r *http.Request, payload map[string]any, p float64) (string, bool) {
 	if v := strings.TrimSpace(r.Header.Get("X-Session-Id")); v != "" {
-		return fmt.Sprintf("session:%s:p:%g", v, p)
+		return fmt.Sprintf("session:%s:p:%g", v, p), true
 	}
-	fp := conversationFingerprint(payload)
-	if fp == "" {
-		return ""
+	fp, ok := conversationFingerprint(payload)
+	if !ok {
+		return "", false
 	}
-	return fmt.Sprintf("fingerprint:%s:p:%g", fp, p)
+	return fmt.Sprintf("fingerprint:%s:p:%g", fp, p), true
 }
 
-func conversationFingerprint(payload map[string]any) string {
+func conversationFingerprint(payload map[string]any) (string, bool) {
 	messages, ok := payload["messages"].([]any)
 	if !ok {
-		return ""
+		return "", false
 	}
 	var systemMsg, userMsg string
 	for _, raw := range messages {
 		msg, ok := raw.(map[string]any)
 		if !ok {
+			log.Printf("proxy: message is not an object: %#v", raw)
 			continue
 		}
-		role, _ := msg["role"].(string)
-		content, _ := msg["content"].(string)
+		role, ok := msg["role"].(string)
+		if !ok {
+			log.Printf("proxy: message missing role or role is not a string: %#v", msg)
+			continue
+		}
+		content, ok := msg["content"].(string)
+		if !ok {
+			log.Printf("proxy: message missing content or content is not a string: %#v", msg)
+			continue
+		}
 		switch {
 		case role == "system" && systemMsg == "":
 			systemMsg = content
@@ -314,8 +334,8 @@ func conversationFingerprint(payload map[string]any) string {
 		}
 	}
 	if systemMsg == "" && userMsg == "" {
-		return ""
+		return "", false
 	}
 	h := sha256.Sum256([]byte(systemMsg + "\x00" + userMsg))
-	return hex.EncodeToString(h[:])
+	return hex.EncodeToString(h[:]), true
 }
