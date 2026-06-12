@@ -2,6 +2,7 @@ package mapping_test
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,18 +11,14 @@ import (
 )
 
 func TestResolveFixture(t *testing.T) {
-	s := snap(
-		candidate("gpt-5-5-high", "GPT-5.5 (high)", "OpenAI", 90, 1),
-		candidate("claude-sonnet-4-5", "Claude Sonnet 4.5", "Anthropic", 80, 1),
-		candidate("ambiguous", "Ambiguous", "OpenAI", 70, 1),
-		candidate("missing-model", "Missing Model", "OpenAI", 60, 1),
-	)
-	catalog := catalog(
-		model("openai/gpt-5.5", "GPT-5.5"),
-		model("anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5"),
-		model("openai/ambiguous", "Ambiguous"),
-		model("openai/ambiguous-alt", "Ambiguous"),
-	)
+	s, err := snapshot.Load(filepath.Join("testdata", "aa-snapshot.json"))
+	if err != nil {
+		t.Fatalf("Load snapshot fixture: %v", err)
+	}
+	catalog, err := mapping.LoadCatalog(filepath.Join("testdata", "openrouter-models.json"))
+	if err != nil {
+		t.Fatalf("Load catalog fixture: %v", err)
+	}
 
 	report, err := mapping.Resolve(s, catalog)
 	if err != nil {

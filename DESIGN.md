@@ -23,12 +23,11 @@ three coarse quality tiers. This project improves on it three ways:
   **cheapest candidate at or above the floor** by composite cost score. This is
   automatically Pareto-optimal. `p=0` → cheapest overall; `p=1` → top-ranked
   regardless of cost. Tie-break: higher quality, then stable by slug.
-- **Candidate eligibility — pre-normalization quality floor.** Models with
-  `Quality < 20.0` are dropped before snapshot candidates are built. `Quality` is
-  the Coding Agent Index when available, otherwise the Data API coding index.
-  This keeps tiny/weak models out of normalization and routing. Future
-  context-window gates can use AA Pro `context_window_tokens` or models.dev
-  metadata.
+- **Candidate eligibility — pre-normalization coding floor.** Models with
+  `artificial_analysis_coding_index < 20.0` are dropped before snapshot
+  candidates are built. This keeps tiny/weak models out of normalization and
+  routing while staying within AA free-tier fields. Future context-window gates
+  can use AA Pro `context_window_tokens` or models.dev metadata.
 - **M3 mapping — dynamic, deterministic, no checked-in alias table.** AA free
   tier omits `openrouter_api_id`, so M3 resolves AA candidates against the live
   OpenRouter `/api/v1/models` catalog and caches that catalog locally. Matching
@@ -41,19 +40,16 @@ three coarse quality tiers. This project improves on it three ways:
   accepts the knob via model name (`pareto@0.7`) and/or header, rewrites the
   model field, forwards to OpenRouter with SSE streaming passthrough.
 - **Stack — Go.** Single static binary, long-running local daemon, stdlib only.
-- **Data source — Artificial Analysis, via a pluggable provider interface.** See
-  below. The provider fetches the AA Data API free-tier language-model list for
-  identity, pricing, and fallback quality fields, then overlays the public
-  Coding Agent Index from AA's coding-agents page when a host-model slug can be
-  matched exactly. The page is used only for the benchmark score; the Data API
-  remains the source of pricing and candidate metadata.
-- **Quality metric — AA Coding Agent Index when available, Data API coding index
-  otherwise.** The preferred quality signal is the public Artificial Analysis
-  Coding Agent Index (0–100 after scaling), because this router targets coding
-  agents and should agree with AA's coding-agent leaderboard. For models that do
-  not have an exact coding-agent host-model match, the provider falls back to the
-  Data API's `artificial_analysis_coding_index`. The agentic and intelligence
-  indices are stored alongside for future use.
+- **Data source — Artificial Analysis Data API (free tier), via a pluggable
+  provider interface.** See below. The earlier plan to scrape AA's coding-agents
+  leaderboard page (a Next.js RSC payload) and join models.dev pricing was
+  dropped: it was fragile and unnecessary. The AA Data API returns coding
+  quality, full pricing, and a measured eval cost in clean paginated JSON.
+- **Quality metric — `artificial_analysis_coding_index`** (model-level coding
+  score, 0–100). We route to a *raw* model, so the model-level coding index is
+  the right signal (the harness-aware "Coding Agent Index" is not exposed by the
+  API and conflates harness with model). The agentic and intelligence indices are
+  stored alongside for future use.
 - **Cost axis — a single blended per-token price (V1).** Cost is
   `BlendedPricePer1M = (3·price_1m_input + 1·price_1m_output) / 4` (AA's standard
   3:1 blend), taken straight from AA's in-band pricing. V1 deliberately does
@@ -79,7 +75,7 @@ client (aider / Claude Code / curl)
 │   transport-level retry; Retry-After honored │
 │ data refresher (background, daily):          │
 │   • BenchmarkProvider.Fetch() → []Model      │
-│     (default: AA Data API + score overlay)     │
+│     (default: Artificial Analysis Data API)  │
 │   • disk-cached snapshot; stale data is OK   │
 └──────────────┬───────────────────────────────┘
                ▼ forwards with rewritten model
@@ -91,7 +87,7 @@ client (aider / Claude Code / curl)
 ```
 cmd/router/            CLI: subcommand dispatch + `snapshot` (M1), `select` (M2), `mappings` (M3)
 internal/provider/     BenchmarkProvider interface + provider-agnostic Model record
-internal/provider/aa/  Artificial Analysis provider: Data API + Coding Agent Index overlay
+internal/provider/aa/  Artificial Analysis Data API provider (default)
 internal/snapshot/     Snapshot/Candidate types, NormalizedQuality + CostScores, store
 internal/refresh/      pure Build (Model→Snapshot), validation, Refresh orchestrator
 internal/engine/       (M2) pure Select(snapshot, p, opts) → routing plan
@@ -138,26 +134,15 @@ and `prompt_tokens`/`completion_tokens`, under Apache-2.0.
 
 ### Artificial Analysis provider (`internal/provider/aa`)
 
-- Endpoints:
-  - `GET https://artificialanalysis.ai/api/v2/language/models/free`, header
-    `x-api-key: $AA_API_KEY`. Paginated (`page` query param, 200/page, ~3 pages
-    ≈ 500 models). Free tier: **25 requests/day** — a refresh costs ~3.
-  - `GET https://artificialanalysis.ai/agents/coding-agents` for the public
-    Coding Agent Index payload. No API key is sent. Matching is deliberately
-    conservative: after stripping the provider prefix, the host-model slug must
-    exactly match the AA model slug, except for known transport/config suffixes
-    such as `-1m` and `-ai-studio`. If no match exists, keep the Data API coding
-    index.
+- Endpoint: `GET https://artificialanalysis.ai/api/v2/language/models/free`,
+  header `x-api-key: $AA_API_KEY`. Paginated (`page` query param, 200/page,
+  ~3 pages ≈ 500 models). Free tier: **25 requests/day** — a refresh costs ~3.
 - Per-model free-tier fields we consume: `slug`, `name`, `model_creator.name`,
   `release_date`, `evaluations.{artificial_analysis_coding_index,
   artificial_analysis_agentic_index, artificial_analysis_intelligence_index}`,
   `pricing.{price_1m_input_tokens, price_1m_output_tokens,
   price_1m_cache_hit_tokens, price_1m_cache_write_tokens}`,
   `artificial_analysis_intelligence_index_cost.total_cost`.
-- The provider maps Data API fields into `Model`, then overwrites
-  `Model.CodingIndex` with the Coding Agent Index score for exact host-model
-  matches. `Quality` in the snapshot is therefore the coding-agent score when
-  available and the model-level coding index otherwise.
 - `openrouter_api_id` is **Pro-tier only** (absent on free). The OpenRouter ID is
   needed only for routing. With a free AA key, M3 maps AA slug/name to
   OpenRouter ID dynamically from OpenRouter's live catalog; with a future Pro key
@@ -170,17 +155,17 @@ and `prompt_tokens`/`completion_tokens`, under Apache-2.0.
 ### Build pipeline (pure)
 
 `Build(models []provider.Model, fetchedAt) → (Snapshot, warnings, error)`:
-keep models that have a quality score **≥ 20.0** and input price **and** output
+keep models that have a coding index **≥ 20.0** and input price **and** output
 price (others → `Dropped` with a reason) → compute
 `BlendedPricePer1M = (3·input + output)/4` → fill `Candidate` → sort by
 `BlendedPricePer1M`. Normalized quality is computed by the `snapshot` helper at
 use time, not stored.
 
 `Candidate` (stored): `Slug, OpenRouterID, Name, Creator, ReleaseDate`,
-`Quality` (Coding Agent Index when available, otherwise coding index),
-`AgenticIndex`, `IntelligenceIndex`, `InputPricePer1M`, `OutputPricePer1M`,
-`CacheHitPricePer1M`, `BlendedPricePer1M` (the cost axis),
-`EvalTotalCostUSD` (informational), `Provider`.
+`Quality` (coding index), `AgenticIndex`, `IntelligenceIndex`,
+`InputPricePer1M`, `OutputPricePer1M`, `CacheHitPricePer1M`,
+`BlendedPricePer1M` (the cost axis), `EvalTotalCostUSD` (informational),
+`Provider`.
 
 `snapshot` helper (pure, set-dependent, keyed by `Slug`):
 - `NormalizedQuality(cands) map[string]float64` — min–max of `Quality`. Cost
@@ -192,7 +177,7 @@ use time, not stored.
 - Per candidate: non-empty slug; `Quality` finite and in a plausible band
   (0–100); `InputPricePer1M`/`OutputPricePer1M` present and ≥ 0.
 - ≥ 30 surviving candidates (133+ today) else fail.
-- Max quality score ≥ 20 (guards a silent scale/units change) else fail.
+- Max coding index ≥ 20 (guards a silent scale/units change) else fail.
 
 ### Snapshot store
 
@@ -212,18 +197,18 @@ error.
   ordering, single-candidate behavior, and invalid input errors. The engine is
   available from the CLI via `router select [--p P] [--refresh] [--json]
   [--cache PATH]`, which loads the snapshot and displays the primary plus
-  fallbacks with AA attribution. The data layer filters out models below quality
-  score `20.0` before normalization and bumps the snapshot schema to reject stale
+  fallbacks with AA attribution. The data layer filters out models below coding
+  index `20.0` before normalization and bumps the snapshot schema to reject stale
   pre-filter caches.
 - **M3 — dynamic OpenRouter mapping.** `internal/mapping` persists a local
   OpenRouter catalog cache at
   `os.UserCacheDir()/coding-model-router/openrouter-models.json`, fetches
   `GET https://openrouter.ai/api/v1/models` on demand, and resolves AA
   candidates with deterministic provider/name matching. `router mappings`
-  reports mapped/unmapped/ambiguous counts, top unmapped candidates by quality,
-  and JSON diagnostics. `router select --mapped-only` resolves the snapshot first,
-  drops unresolved/ambiguous candidates, sets `Candidate.OpenRouterID` on mapped
-  candidates, and then calls the same pure M2 engine.
+  reports mapped/unmapped/ambiguous counts, top unmapped candidates by AA coding
+  quality, and JSON diagnostics. `router select --mapped-only` resolves the
+  snapshot first, drops unresolved/ambiguous candidates, sets `Candidate.OpenRouterID`
+  on mapped candidates, and then calls the same pure M2 engine.
 
 ## Future milestones (designed; not yet built)
 
@@ -267,7 +252,8 @@ error.
   `artificial_analysis_intelligence_index_token_counts` (input / output /
   reasoning token counts) on the Pro tier. The eventual cost axis becomes some
   blend of price and that measured token burn (caveat: AA's figure is the
-  Intelligence Index workload, not a coding-specific run).
+  Intelligence Index workload, not a coding-specific run — a richer provider or
+  the Coding Agent Index would be more faithful).
 - Aider / SWE-bench providers · adaptive `p=auto` via difficulty classifier ·
   budget governor + cost ledger · personal calibration · shadow / A-B mode ·
   speed axis (`:nitro`) · capability filters (context window, tool-calling,
