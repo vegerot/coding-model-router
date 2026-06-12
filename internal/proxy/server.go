@@ -161,6 +161,7 @@ type logEntry struct {
 	FallbackHops int           `json:"fallback_hops"`
 	Status       int           `json:"status"`
 	Attempts     []attemptInfo `json:"attempts,omitempty"`
+	Output       string        `json:"output,omitempty"`
 }
 
 type attemptInfo struct {
@@ -181,6 +182,15 @@ func logRequest(w io.Writer, r *http.Request, p float64, plan engine.Plan, resp 
 			Status: resp.StatusCode,
 		}},
 	}
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		data, err := io.ReadAll(resp.Body)
+		if err == nil {
+			entry.Output = string(data)
+			resp.Body = io.NopCloser(bytes.NewReader(data))
+		}
+	}
+
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return
