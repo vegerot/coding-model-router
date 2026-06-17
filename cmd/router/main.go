@@ -55,11 +55,11 @@ Usage:
   router snapshot [--refresh] [--json] [--cache PATH]
       Build or display the candidate model snapshot (quality + blended cost).
 
-  router select [--p P] [--refresh] [--json] [--cache PATH]
+  router select [--p P] [--json] [--cache PATH]
                 [--show-unmapped-openrouter-models]
       Select the cheapest model at or above quality floor P.
 
-  router mappings [--refresh] [--json] [--cache PATH] [--openrouter-cache PATH]
+  router mappings [--json] [--cache PATH] [--openrouter-cache PATH]
       Resolve snapshot candidates to OpenRouter model IDs.
 
   router serve [--addr ADDR] [--p P] [--refresh] [--cache PATH]

@@ -76,7 +76,7 @@ M4 and later.
   (cost, then higher quality, then slug). Tests cover p=0 cheapest, p=1 best,
   monotonic non-decreasing cost as p rises, dominated models never chosen,
   single-candidate behavior, fallback ordering, and invalid input errors.
-- [x] **M2.1 — CLI selection.** `router select [--p P] [--refresh] [--json]
+- [x] **M2.1 — CLI selection.** `router select [--p P] [--json]
   [--cache PATH] [--aa-api-key KEY]` loads the cached/refreshed snapshot, calls
   `engine.Select`, and prints the selected primary plus ordered fallbacks.
   JSON output includes the plan, snapshot source metadata, fetch time, and AA

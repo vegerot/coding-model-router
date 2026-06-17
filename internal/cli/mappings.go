@@ -14,23 +14,22 @@ import (
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
 
-// Mappings implements `router mappings`: resolve cached/refreshed AA snapshot
+// Mappings implements `router mappings`: resolve cached AA snapshot
 // candidates to OpenRouter IDs and print diagnostics.
 func Mappings(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("mappings", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		doRefresh      = fs.Bool("refresh", false, "refresh both snapshot and OpenRouter catalog caches")
 		asJSON         = fs.Bool("json", false, "emit mapping diagnostics as JSON instead of a table")
 		cachePath      = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		aaApiKey         = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		aaApiKey       = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		openRouterPath = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	s, report, code := loadMappingReport(*cachePath, *openRouterPath, *doRefresh, *aaApiKey, stderr)
+	s, report, code := loadMappingReport(*cachePath, *openRouterPath, false, *aaApiKey, stderr)
 	if s == nil {
 		return code
 	}

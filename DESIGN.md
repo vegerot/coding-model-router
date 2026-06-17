@@ -195,7 +195,7 @@ error.
   that clear the floor. Unit tests cover cheapest at `p=0`, best at `p=1`,
   monotonic non-decreasing cost in `p`, dominated models never chosen, fallback
   ordering, single-candidate behavior, and invalid input errors. The engine is
-  available from the CLI via `router select [--p P] [--refresh] [--json]
+  available from the CLI via `router select [--p P] [--json]
   [--cache PATH]`, which loads the snapshot and displays the primary plus
   fallbacks with AA attribution. The data layer filters out models below coding
   index `20.0` before normalization and bumps the snapshot schema to reject stale
