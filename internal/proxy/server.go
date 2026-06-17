@@ -107,6 +107,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	plan := engine.Plan{}
+	var sentFallbacks []string
 	if decision.Route {
 		plan, err = s.selectPlan(r, payload, decision.P)
 		if err != nil {
@@ -115,8 +116,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		payload["model"] = plan.Primary.OpenRouterID
 
-		if fallbacks := s.fallbackModelIDs(plan); len(fallbacks) > 0 {
-			payload["models"] = fallbacks
+		sentFallbacks = s.fallbackModelIDs(plan)
+		if len(sentFallbacks) > 0 {
+			payload["models"] = sentFallbacks
 		}
 
 		body, err = json.Marshal(payload)
@@ -132,14 +134,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	if s.logger != nil {
-		logRequest(s.logger, r, decision.P, model, plan, resp)
-	}
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
 	w.WriteHeader(resp.StatusCode)
-	streamBody(w, resp.Body)
+
+	// Stream live to the client while sniffing the served model (and, on error, the
+	// full body) so logging reflects what OpenRouter actually served — including a
+	// native fallback — without buffering the whole stream.
+	sniff := &servedModelSniffer{logErrorBody: resp.StatusCode < 200 || resp.StatusCode > 299}
+	streamBody(w, io.TeeReader(resp.Body, sniff))
+
+	if s.logger != nil {
+		s.logRequest(s.logger, r, decision.P, model, plan, sentFallbacks, resp.StatusCode, sniff.errorBody(), sniff.servedModel())
+	}
 }
 
 func (s *Server) selectPlan(r *http.Request, payload map[string]any, p float64) (engine.Plan, error) {
@@ -238,19 +246,36 @@ type attemptInfo struct {
 	Status int    `json:"status"`
 }
 
-func logRequest(w io.Writer, r *http.Request, p float64, requestModel string, plan engine.Plan, resp *http.Response) {
+func (s *Server) logRequest(w io.Writer, r *http.Request, p float64, requestModel string, plan engine.Plan, sentFallbacks []string, status int, respBody []byte, servedModel string) {
 	model := requestModel
 	provider := ""
 	fallbackHops := 0
 	attempts := []attemptInfo(nil)
 	if plan.Primary.OpenRouterID != "" {
+		// A routed request. The model we requested as primary is the first attempt;
+		// OpenRouter may have served a native fallback instead. Prefer the model
+		// OpenRouter actually reported serving.
 		model = plan.Primary.OpenRouterID
 		provider = plan.Primary.Provider
-		fallbackHops = len(plan.Fallbacks)
-		attempts = []attemptInfo{{
-			Model:  plan.Primary.OpenRouterID,
-			Status: resp.StatusCode,
-		}}
+
+		attemptChain := append([]string{plan.Primary.OpenRouterID}, sentFallbacks...)
+		if servedModel != "" {
+			// Always trust the model OpenRouter reported serving. Match it back to the
+			// attempt chain to count fallback hops; if it isn't one we recognize, still
+			// log it honestly with 0 hops rather than claiming the requested primary.
+			model = servedModel
+			if hop := matchServedModel(attemptChain, servedModel); hop >= 0 {
+				fallbackHops = hop
+			}
+			provider = s.providerForOpenRouterID(servedModel)
+		}
+
+		attempts = make([]attemptInfo, 0, fallbackHops+1)
+		for i := 0; i < fallbackHops && i < len(attemptChain); i++ {
+			// Everything before the served model is presumed to have failed over.
+			attempts = append(attempts, attemptInfo{Model: attemptChain[i], Status: http.StatusServiceUnavailable})
+		}
+		attempts = append(attempts, attemptInfo{Model: model, Status: status})
 	}
 	entry := logEntry{
 		SessionID:    stickySessionID(r),
@@ -258,16 +283,12 @@ func logRequest(w io.Writer, r *http.Request, p float64, requestModel string, pl
 		Model:        model,
 		Provider:     provider,
 		FallbackHops: fallbackHops,
-		Status:       resp.StatusCode,
+		Status:       status,
 		Attempts:     attempts,
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		data, err := io.ReadAll(resp.Body)
-		if err == nil {
-			entry.Output = string(data)
-			resp.Body = io.NopCloser(bytes.NewReader(data))
-		}
+	if status < 200 || status > 299 {
+		entry.Output = string(respBody)
 	}
 
 	data, err := json.Marshal(entry)
@@ -275,6 +296,107 @@ func logRequest(w io.Writer, r *http.Request, p float64, requestModel string, pl
 		return
 	}
 	_, _ = w.Write(append(data, '\n'))
+}
+
+func (s *Server) providerForOpenRouterID(id string) string {
+	for _, c := range s.snapshot.Candidates {
+		if c.OpenRouterID == id {
+			return c.Provider
+		}
+	}
+	return ""
+}
+
+// matchServedModel finds which attempt OpenRouter served. OpenRouter often
+// appends a date/variant suffix to the served model (e.g. our "openai/gpt-5.5"
+// comes back as "openai/gpt-5.5-20260423"), so an exact match is tried first and
+// then a `<id>-` prefix match.
+func matchServedModel(ids []string, served string) int {
+	for i, id := range ids {
+		if id == served {
+			return i
+		}
+	}
+	for i, id := range ids {
+		if id != "" && strings.HasPrefix(served, id+"-") {
+			return i
+		}
+	}
+	return -1
+}
+
+// maxSniffBytes bounds how much of a streamed response we buffer to detect the
+// served model. The model field appears in the first SSE chunk / JSON object, so
+// a small cap is plenty while keeping memory bounded for long streams.
+const maxSniffBytes = 64 * 1024
+
+// servedModelSniffer is an io.Writer placed on the tee of the upstream stream. It
+// buffers up to maxSniffBytes to extract the served model once, and (for error
+// responses) retains the full body for logging.
+type servedModelSniffer struct {
+	logErrorBody bool
+	buf          bytes.Buffer
+	full         bytes.Buffer
+	found        string
+	done         bool
+}
+
+func (s *servedModelSniffer) Write(p []byte) (int, error) {
+	if s.logErrorBody {
+		s.full.Write(p)
+	}
+	if !s.done {
+		remaining := maxSniffBytes - s.buf.Len()
+		if remaining > 0 {
+			if len(p) < remaining {
+				remaining = len(p)
+			}
+			s.buf.Write(p[:remaining])
+		}
+		if m := servedModelFromResponse(s.buf.Bytes()); m != "" {
+			s.found = m
+			s.done = true
+		} else if s.buf.Len() >= maxSniffBytes {
+			s.done = true
+		}
+	}
+	return len(p), nil
+}
+
+func (s *servedModelSniffer) servedModel() string { return s.found }
+
+func (s *servedModelSniffer) errorBody() []byte {
+	if !s.logErrorBody {
+		return nil
+	}
+	return s.full.Bytes()
+}
+
+// servedModelFromResponse extracts the model OpenRouter reported serving, from
+// either a JSON completion body or the first SSE data chunk.
+func servedModelFromResponse(body []byte) string {
+	var obj struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(body), &obj); err == nil && obj.Model != "" {
+		return obj.Model
+	}
+	// SSE: scan each `data:` line for the first chunk carrying a model field.
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		payload, ok := bytes.CutPrefix(line, []byte("data:"))
+		if !ok {
+			continue
+		}
+		payload = bytes.TrimSpace(payload)
+		if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+			continue
+		}
+		if err := json.Unmarshal(payload, &obj); err == nil && obj.Model != "" {
+			return obj.Model
+		}
+	}
+	return ""
 }
 
 func streamBody(w http.ResponseWriter, body io.Reader) {

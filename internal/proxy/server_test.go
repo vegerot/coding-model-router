@@ -381,6 +381,66 @@ func TestServeStreamsSSE(t *testing.T) {
 	}
 }
 
+func TestServerLogsServedModelFromSSEStreamWithoutBuffering(t *testing.T) {
+	released := make(chan struct{})
+	firstChunkSent := make(chan struct{})
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fl := w.(http.Flusher)
+		io.WriteString(w, "data: {\"model\":\"test/mid\",\"choices\":[]}\n\n")
+		fl.Flush()
+		close(firstChunkSent)
+		<-released // hold the stream open to prove relay is incremental, not buffered
+		io.WriteString(w, "data: [DONE]\n\n")
+		fl.Flush()
+	})
+	defer up.Close()
+	var log bytes.Buffer
+	px := newProxy(t, mappedSnapshot(), up.URL, func(cfg *proxy.Config) { cfg.Logger = &log })
+	defer px.Close()
+
+	type result struct {
+		body string
+	}
+	done := make(chan result, 1)
+	go func() {
+		resp := post(t, px.URL, `{"model":"pareto@0.0","stream":true,"messages":[]}`, nil)
+		defer resp.Body.Close()
+		buf := make([]byte, 1024)
+		// Read the first relayed chunk while upstream still holds the stream open.
+		n, _ := resp.Body.Read(buf)
+		first := string(buf[:n])
+		if !strings.Contains(first, "test/mid") {
+			t.Errorf("did not receive first chunk incrementally, got %q", first)
+		}
+		close(released)
+		rest, _ := io.ReadAll(resp.Body)
+		done <- result{body: first + string(rest)}
+	}()
+
+	<-firstChunkSent
+	res := <-done
+	if !strings.Contains(res.body, "[DONE]") {
+		t.Errorf("relayed stream missing [DONE]: %q", res.body)
+	}
+
+	var entry struct {
+		Model        string `json:"model"`
+		FallbackHops int    `json:"fallback_hops"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(log.Bytes()), &entry); err != nil {
+		t.Fatalf("decode log: %v\n%s", err, log.String())
+	}
+	if entry.Model != "test/mid" {
+		t.Errorf("logged model = %q, want test/mid from SSE stream", entry.Model)
+	}
+	if entry.FallbackHops != 1 {
+		t.Errorf("logged fallback_hops = %d, want 1", entry.FallbackHops)
+	}
+}
+
 func TestServeRoutesMultimodalArrayContent(t *testing.T) {
 	var cap capture
 	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{}`) })
@@ -458,6 +518,65 @@ func TestServerLogsStructuredRequest(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), `"p":0.8`) {
 		t.Fatalf("log missing p: %s", log.String())
+	}
+}
+
+func TestServerLogsActualServedFallbackModel(t *testing.T) {
+	var cap capture
+	// primary is test/cheap (p=0), but upstream's native fallback served test/mid.
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"x","model":"test/mid"}`)
+	})
+	defer up.Close()
+	var log bytes.Buffer
+	px := newProxy(t, mappedSnapshot(), up.URL, func(cfg *proxy.Config) { cfg.Logger = &log })
+	defer px.Close()
+
+	resp := post(t, px.URL, `{"model":"pareto@0.0","messages":[]}`, nil)
+	resp.Body.Close()
+
+	var entry struct {
+		Model        string `json:"model"`
+		FallbackHops int    `json:"fallback_hops"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(log.Bytes()), &entry); err != nil {
+		t.Fatalf("decode log entry: %v\n%s", err, log.String())
+	}
+	if entry.Model != "test/mid" {
+		t.Errorf("logged model = %q, want test/mid (the actually-served fallback)", entry.Model)
+	}
+	if entry.FallbackHops != 1 {
+		t.Errorf("logged fallback_hops = %d, want 1", entry.FallbackHops)
+	}
+}
+
+func TestServerLogsZeroHopsWhenPrimaryServed(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"x","model":"test/cheap"}`)
+	})
+	defer up.Close()
+	var log bytes.Buffer
+	px := newProxy(t, mappedSnapshot(), up.URL, func(cfg *proxy.Config) { cfg.Logger = &log })
+	defer px.Close()
+
+	resp := post(t, px.URL, `{"model":"pareto@0.0","messages":[]}`, nil)
+	resp.Body.Close()
+
+	var entry struct {
+		Model        string `json:"model"`
+		FallbackHops int    `json:"fallback_hops"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(log.Bytes()), &entry); err != nil {
+		t.Fatalf("decode log entry: %v\n%s", err, log.String())
+	}
+	if entry.Model != "test/cheap" {
+		t.Errorf("logged model = %q, want test/cheap", entry.Model)
+	}
+	if entry.FallbackHops != 0 {
+		t.Errorf("logged fallback_hops = %d, want 0 when primary served", entry.FallbackHops)
 	}
 }
 
