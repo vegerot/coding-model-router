@@ -159,8 +159,8 @@ func seedCatalog(t *testing.T, path string) {
 		FetchedAt:     time.Date(2026, 6, 9, 12, 30, 0, 0, time.UTC),
 		Source:        mapping.CatalogSource,
 		Models: []mapping.OpenRouterModel{
-			{ID: "test/cheap-low", CanonicalSlug: "test/cheap-low", Name: "Cheap Low"},
-			{ID: "test/mid", CanonicalSlug: "test/mid", Name: "Mid"},
+			{ID: "test/cheap-low", CanonicalSlug: "test/cheap-low", Name: "Cheap Low", Pricing: mapping.Pricing{Prompt: "0.000001", Completion: "0.000001"}},
+			{ID: "test/mid", CanonicalSlug: "test/mid", Name: "Mid", Pricing: mapping.Pricing{Prompt: "0.000002", Completion: "0.000002"}},
 		},
 	}
 	if err := mapping.SaveCatalog(path, catalog); err != nil {

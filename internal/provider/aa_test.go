@@ -61,12 +61,8 @@ func TestAAFetchPaginatesAndMaps(t *testing.T) {
 	if m.CodingIndex == nil || *m.CodingIndex != 59.1 {
 		t.Errorf("coding index = %v, want 59.1", m.CodingIndex)
 	}
-	if m.InputPricePer1M == nil || *m.InputPricePer1M != 5 ||
-		m.OutputPricePer1M == nil || *m.OutputPricePer1M != 30 {
-		t.Errorf("pricing wrong: in=%v out=%v", m.InputPricePer1M, m.OutputPricePer1M)
-	}
-	if m.CacheWritePricePer1M != nil {
-		t.Errorf("cache_write was null in fixture; want nil pointer, got %v", *m.CacheWritePricePer1M)
+	if m.InputPricePer1M != nil || m.OutputPricePer1M != nil || m.CacheWritePricePer1M != nil {
+		t.Errorf("AA pricing should be ignored, got in=%v out=%v cache_write=%v", m.InputPricePer1M, m.OutputPricePer1M, m.CacheWritePricePer1M)
 	}
 	if m.EvalTotalCostUSD == nil || *m.EvalTotalCostUSD != 3357 {
 		t.Errorf("total_cost = %v, want 3357", m.EvalTotalCostUSD)
@@ -75,8 +71,7 @@ func TestAAFetchPaginatesAndMaps(t *testing.T) {
 		t.Errorf("free tier should omit openrouter id, got %q", m.OpenRouterID)
 	}
 
-	// The edge model carries null coding index + null pricing — Fetch passes it
-	// through as nils; dropping it is the Build step's job.
+	// The edge model carries null coding index; Fetch passes it through as nil.
 	var edge *provider.Model
 	for i := range models {
 		if models[i].Slug == "edge-no-coding" {

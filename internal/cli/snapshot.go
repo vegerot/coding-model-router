@@ -34,7 +34,7 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 		doRefresh = fs.Bool("refresh", false, "force a re-fetch even if a cached snapshot exists")
 		asJSON    = fs.Bool("json", false, "emit the raw snapshot JSON instead of a table")
 		cachePath = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		aaApiKey    = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		aaApiKey  = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -113,18 +113,14 @@ func renderTable(w io.Writer, s *snapshot.Snapshot) {
 		if norm[left.Slug] != norm[right.Slug] {
 			return norm[left.Slug] > norm[right.Slug]
 		}
-		if left.BlendedPricePer1M != right.BlendedPricePer1M {
-			return left.BlendedPricePer1M < right.BlendedPricePer1M
-		}
 		return left.Slug < right.Slug
 	})
 
 	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "MODEL\tQUALITY\tNORM\tBLENDED$/1M\tIN$\tOUT$\tPROVIDER")
+	fmt.Fprintln(tw, "MODEL\tQUALITY\tNORM\tPROVIDER")
 	for _, c := range cands {
-		fmt.Fprintf(tw, "%s\t%.1f\t%.2f\t%.4g\t%.4g\t%.4g\t%s\n",
-			c.Slug, c.Quality, norm[c.Slug],
-			c.BlendedPricePer1M, c.InputPricePer1M, c.OutputPricePer1M, c.Provider)
+		fmt.Fprintf(tw, "%s\t%.1f\t%.2f\t%s\n",
+			c.Slug, c.Quality, norm[c.Slug], c.Provider)
 	}
 	tw.Flush()
 

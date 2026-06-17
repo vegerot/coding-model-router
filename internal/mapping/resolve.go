@@ -110,8 +110,8 @@ func MappedSnapshot(s *snapshot.Snapshot, report Report) *snapshot.Snapshot {
 		}
 		c := r.Candidate
 		c.OpenRouterID = r.OpenRouterID
-		if len(r.Matches) == 1 {
-			applyOpenRouterPricing(&c, r.Matches[0])
+		if len(r.Matches) != 1 || !applyOpenRouterPricing(&c, r.Matches[0]) {
+			continue
 		}
 		bySlug[c.Slug] = c
 	}
@@ -232,11 +232,11 @@ func modelMatch(m OpenRouterModel) Match {
 	}
 }
 
-func applyOpenRouterPricing(c *snapshot.Candidate, m Match) {
+func applyOpenRouterPricing(c *snapshot.Candidate, m Match) bool {
 	in, inOK := openRouterPricePer1M(m.PromptPrice)
 	out, outOK := openRouterPricePer1M(m.OutputPrice)
 	if !inOK || !outOK {
-		return
+		return false
 	}
 	c.InputPricePer1M = in
 	c.OutputPricePer1M = out
@@ -244,6 +244,7 @@ func applyOpenRouterPricing(c *snapshot.Candidate, m Match) {
 	if cacheHit, ok := openRouterPricePer1M(m.CacheHitPrice); ok {
 		c.CacheHitPricePer1M = cacheHit
 	}
+	return true
 }
 
 func openRouterPricePer1M(value string) (float64, bool) {

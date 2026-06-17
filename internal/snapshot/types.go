@@ -10,12 +10,11 @@ import "time"
 const SchemaVersion = 2
 
 // Attribution is displayed wherever snapshot data is shown. Artificial Analysis
-// requires attribution for use of their data, across all API tiers.
-const Attribution = "Quality & pricing data: Artificial Analysis " +
+// requires attribution for use of their benchmark data, across all API tiers.
+const Attribution = "Quality data: Artificial Analysis " +
 	"(https://artificialanalysis.ai). Used under their terms; attribution required."
 
 // Snapshot is the full, validated set of routing candidates plus provenance.
-// Candidates are sorted by BlendedPricePer1M ascending (the cost axis).
 type Snapshot struct {
 	SchemaVersion int          `json:"schemaVersion"`
 	FetchedAt     time.Time    `json:"fetchedAt"`
@@ -47,14 +46,14 @@ type Candidate struct {
 	AgenticIndex      float64 `json:"agenticIndex,omitempty"`
 	IntelligenceIndex float64 `json:"intelligenceIndex,omitempty"`
 
-	// Pricing, USD per 1M tokens.
-	InputPricePer1M    float64 `json:"inputPricePer1m"`
-	OutputPricePer1M   float64 `json:"outputPricePer1m"`
+	// Pricing, USD per 1M tokens. Populated from OpenRouter after mapping.
+	InputPricePer1M    float64 `json:"inputPricePer1m,omitempty"`
+	OutputPricePer1M   float64 `json:"outputPricePer1m,omitempty"`
 	CacheHitPricePer1M float64 `json:"cacheHitPricePer1m,omitempty"`
 
 	// BlendedPricePer1M = (3·input + output)/4 — the V1 cost axis. The engine
 	// picks the candidate with the lowest BlendedPricePer1M at or above the floor.
-	BlendedPricePer1M float64 `json:"blendedPricePer1m"`
+	BlendedPricePer1M float64 `json:"blendedPricePer1m,omitempty"`
 
 	// EvalTotalCostUSD is the provider's measured benchmark cost — informational
 	// in V1, the seed for a future token-weighted cost axis.

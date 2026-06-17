@@ -50,10 +50,10 @@ func TestLiveRefreshEndToEnd(t *testing.T) {
 	if s.Sources.Provider != provider.AAName {
 		t.Errorf("provider = %q, want %q", s.Sources.Provider, provider.AAName)
 	}
-	// Candidates must be sorted ascending by the cost axis.
+	// Candidates must be sorted descending by quality.
 	for i := 1; i < len(s.Candidates); i++ {
-		if s.Candidates[i].BlendedPricePer1M < s.Candidates[i-1].BlendedPricePer1M {
-			t.Errorf("candidates not sorted by blended price at index %d", i)
+		if s.Candidates[i].Quality > s.Candidates[i-1].Quality {
+			t.Errorf("candidates not sorted by quality at index %d", i)
 			break
 		}
 	}
@@ -61,8 +61,8 @@ func TestLiveRefreshEndToEnd(t *testing.T) {
 		t.Errorf("cache did not round-trip: %v", err)
 	}
 
-	t.Logf("live refresh: %d candidates from %d raw models; cheapest=%s ($%.2f/1M, q=%.1f), priciest=%s ($%.2f/1M, q=%.1f)",
+	t.Logf("live refresh: %d candidates from %d raw models; top=%s (q=%.1f), bottom=%s (q=%.1f)",
 		len(s.Candidates), s.Sources.ModelCount,
-		s.Candidates[0].Slug, s.Candidates[0].BlendedPricePer1M, s.Candidates[0].Quality,
-		s.Candidates[len(s.Candidates)-1].Slug, s.Candidates[len(s.Candidates)-1].BlendedPricePer1M, s.Candidates[len(s.Candidates)-1].Quality)
+		s.Candidates[0].Slug, s.Candidates[0].Quality,
+		s.Candidates[len(s.Candidates)-1].Slug, s.Candidates[len(s.Candidates)-1].Quality)
 }

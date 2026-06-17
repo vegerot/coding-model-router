@@ -77,12 +77,6 @@ type aaModelJSON struct {
 	Cost struct {
 		TotalCost *float64 `json:"total_cost"`
 	} `json:"artificial_analysis_intelligence_index_cost"`
-	Pricing struct {
-		Input      *float64 `json:"price_1m_input_tokens"`
-		Output     *float64 `json:"price_1m_output_tokens"`
-		CacheHit   *float64 `json:"price_1m_cache_hit_tokens"`
-		CacheWrite *float64 `json:"price_1m_cache_write_tokens"`
-	} `json:"pricing"`
 }
 
 // Fetch implements Provider, paging through the free endpoint.
@@ -152,18 +146,14 @@ func (p *AA) fetchPage(ctx context.Context, client *http.Client, page int) (*aaR
 
 func (m aaModelJSON) toModel() Model {
 	return Model{
-		Slug:                 m.Slug,
-		Name:                 m.Name,
-		Creator:              m.Creator.Name,
-		ReleaseDate:          m.ReleaseDate,
-		CodingIndex:          m.Evaluations.Coding,
-		AgenticIndex:         m.Evaluations.Agentic,
-		IntelligenceIndex:    m.Evaluations.Intelligence,
-		InputPricePer1M:      m.Pricing.Input,
-		OutputPricePer1M:     m.Pricing.Output,
-		CacheHitPricePer1M:   m.Pricing.CacheHit,
-		CacheWritePricePer1M: m.Pricing.CacheWrite,
-		EvalTotalCostUSD:     m.Cost.TotalCost,
+		Slug:              m.Slug,
+		Name:              m.Name,
+		Creator:           m.Creator.Name,
+		ReleaseDate:       m.ReleaseDate,
+		CodingIndex:       m.Evaluations.Coding,
+		AgenticIndex:      m.Evaluations.Agentic,
+		IntelligenceIndex: m.Evaluations.Intelligence,
+		EvalTotalCostUSD:  m.Cost.TotalCost,
 		// openrouter_api_id is Pro-tier only; left empty on the free tier.
 	}
 }

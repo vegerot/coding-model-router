@@ -77,7 +77,7 @@ func Select(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 
-	renderPlan(stdout, s, plan)
+	renderPlan(stdout, s, plan, *showUnmappedOpenRouterModels)
 	return code
 }
 
@@ -89,14 +89,22 @@ type selectJSON struct {
 	Mappings    *mapping.Summary    `json:"mappings,omitempty"`
 }
 
-func renderPlan(w io.Writer, s *snapshot.Snapshot, plan engine.Plan) {
+func renderPlan(w io.Writer, s *snapshot.Snapshot, plan engine.Plan, hidePrices bool) {
 	norm := snapshot.NormalizedQuality(s.Candidates)
 
 	tw := tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(tw, "ROLE\tMODEL\tOPENROUTER_ID\tQUALITY\tNORM\tBLENDED$/1M\tPROVIDER")
-	printPlanRow(tw, "primary", plan.Primary, norm)
-	for i, c := range plan.Fallbacks {
-		printPlanRow(tw, fmt.Sprintf("fallback-%d", i+1), c, norm)
+	if hidePrices {
+		fmt.Fprintln(tw, "ROLE\tMODEL\tOPENROUTER_ID\tQUALITY\tNORM\tPROVIDER")
+		printPlanRowWithoutPrice(tw, "primary", plan.Primary, norm)
+		for i, c := range plan.Fallbacks {
+			printPlanRowWithoutPrice(tw, fmt.Sprintf("fallback-%d", i+1), c, norm)
+		}
+	} else {
+		fmt.Fprintln(tw, "ROLE\tMODEL\tOPENROUTER_ID\tQUALITY\tNORM\tBLENDED$/1M\tPROVIDER")
+		printPlanRow(tw, "primary", plan.Primary, norm)
+		for i, c := range plan.Fallbacks {
+			printPlanRow(tw, fmt.Sprintf("fallback-%d", i+1), c, norm)
+		}
 	}
 	tw.Flush()
 
@@ -108,4 +116,9 @@ func renderPlan(w io.Writer, s *snapshot.Snapshot, plan engine.Plan) {
 func printPlanRow(w io.Writer, role string, c snapshot.Candidate, norm map[string]float64) {
 	fmt.Fprintf(w, "%s\t%s\t%s\t%.1f\t%.2f\t%.4g\t%s\n",
 		role, c.Slug, c.OpenRouterID, c.Quality, norm[c.Slug], c.BlendedPricePer1M, c.Provider)
+}
+
+func printPlanRowWithoutPrice(w io.Writer, role string, c snapshot.Candidate, norm map[string]float64) {
+	fmt.Fprintf(w, "%s\t%s\t%s\t%.1f\t%.2f\t%s\n",
+		role, c.Slug, c.OpenRouterID, c.Quality, norm[c.Slug], c.Provider)
 }

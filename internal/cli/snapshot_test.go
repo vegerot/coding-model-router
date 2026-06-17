@@ -69,7 +69,7 @@ func TestSnapshotPrintsFromCache(t *testing.T) {
 	got := out.String()
 
 	// Header + all candidate slugs present.
-	for _, want := range []string{"MODEL", "QUALITY", "NORM", "BLENDED$/1M", "cheap-low", "mid", "pricey-top"} {
+	for _, want := range []string{"MODEL", "QUALITY", "NORM", "cheap-low", "mid", "pricey-top"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("table missing %q\n---\n%s", want, got)
 		}

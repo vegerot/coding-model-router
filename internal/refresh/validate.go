@@ -33,9 +33,6 @@ func Validate(s *snapshot.Snapshot) error {
 		if c.Quality < 0 || c.Quality > maxPlausibleQuality {
 			return fmt.Errorf("refresh: candidate %s quality %v outside [0, %v]", c.Slug, c.Quality, maxPlausibleQuality)
 		}
-		if c.InputPricePer1M < 0 || c.OutputPricePer1M < 0 {
-			return fmt.Errorf("refresh: candidate %s has a negative price", c.Slug)
-		}
 		if c.Quality > maxQuality {
 			maxQuality = c.Quality
 		}

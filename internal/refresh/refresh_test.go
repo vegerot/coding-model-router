@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -50,9 +49,12 @@ func at() time.Time {
 
 func TestBuildFiltersAndComputes(t *testing.T) {
 	models := []provider.Model{
-		validModel("good", 50, 4, 16), // blended = (3*4+16)/4 = 7
-		{Slug: "no-coding", Name: "no-coding", InputPricePer1M: ptr(1), OutputPricePer1M: ptr(2)},
-		{Slug: "no-price", Name: "no-price", CodingIndex: ptr(40)},
+		{
+			Slug: "good", Name: "good", Creator: "Test",
+			CodingIndex: ptr(50), AgenticIndex: ptr(51), IntelligenceIndex: ptr(52), EvalTotalCostUSD: ptr(400),
+		},
+		{Slug: "no-coding", Name: "no-coding"},
+		{Slug: "too-low", Name: "too-low", CodingIndex: ptr(19)},
 	}
 	s := refresh.Build(models, "artificial-analysis", at())
 
@@ -63,8 +65,8 @@ func TestBuildFiltersAndComputes(t *testing.T) {
 	if c.Slug != "good" {
 		t.Errorf("kept wrong candidate: %s", c.Slug)
 	}
-	if c.BlendedPricePer1M != 7 {
-		t.Errorf("blended price = %v, want 7", c.BlendedPricePer1M)
+	if c.InputPricePer1M != 0 || c.OutputPricePer1M != 0 || c.BlendedPricePer1M != 0 {
+		t.Errorf("AA prices should not be carried into snapshot: %+v", c)
 	}
 	if c.AgenticIndex != 51 || c.IntelligenceIndex != 52 || c.EvalTotalCostUSD != 400 {
 		t.Errorf("optional fields not carried: %+v", c)
@@ -78,7 +80,6 @@ func TestBuildFiltersAndComputes(t *testing.T) {
 	if len(s.Dropped) != 2 {
 		t.Fatalf("expected 2 dropped, got %d (%+v)", len(s.Dropped), s.Dropped)
 	}
-	// Each drop must name a reason.
 	for _, d := range s.Dropped {
 		if d.Reason == "" {
 			t.Errorf("dropped %s has no reason", d.Slug)
@@ -89,22 +90,19 @@ func TestBuildFiltersAndComputes(t *testing.T) {
 	}
 }
 
-func TestBuildSortsByBlendedPriceAscending(t *testing.T) {
+func TestBuildSortsByQualityDescending(t *testing.T) {
 	models := []provider.Model{
-		validModel("pricey", 60, 20, 40), // blended 25
-		validModel("cheap", 30, 0, 4),    // blended 1
-		validModel("mid", 45, 4, 16),     // blended 7
+		validModel("mid", 45, 4, 16),
+		validModel("top", 60, 20, 40),
+		validModel("cheap", 30, 0, 4),
 	}
 	s := refresh.Build(models, "p", at())
-	got := make([]float64, len(s.Candidates))
-	for i, c := range s.Candidates {
-		got[i] = c.BlendedPricePer1M
-	}
-	if !sort.Float64sAreSorted(got) {
-		t.Errorf("candidates not sorted ascending by blended price: %v", got)
-	}
-	if s.Candidates[0].Slug != "cheap" {
-		t.Errorf("cheapest first expected 'cheap', got %q", s.Candidates[0].Slug)
+	got := []string{s.Candidates[0].Slug, s.Candidates[1].Slug, s.Candidates[2].Slug}
+	want := []string{"top", "mid", "cheap"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("candidate order = %v, want %v", got, want)
+		}
 	}
 }
 

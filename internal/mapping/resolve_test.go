@@ -52,7 +52,7 @@ func TestMappedSnapshotKeepsOnlyMappedCandidates(t *testing.T) {
 		candidate("top", "Top", "", 60, 10),
 	)
 	catalog := catalog(
-		model("test/top", "Top"),
+		modelWithPricing("test/top", "Top", "0.00001", "0.00001", ""),
 	)
 	report, err := mapping.Resolve(s, catalog)
 	if err != nil {
@@ -98,6 +98,20 @@ func TestMappedSnapshotUsesOpenRouterPricing(t *testing.T) {
 		t.Fatalf("mapped candidates not sorted by OpenRouter price: %+v", mapped.Candidates)
 	}
 }
+func TestMappedSnapshotDropsModelsMissingOpenRouterPricing(t *testing.T) {
+	s := snap(candidate("free", "Free", "Test", 30, 0))
+	catalog := catalog(model("test/free", "Free"))
+	report, err := mapping.Resolve(s, catalog)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	mapped := mapping.MappedSnapshot(s, report)
+	if len(mapped.Candidates) != 0 {
+		t.Fatalf("mapped candidates = %+v, want none", mapped.Candidates)
+	}
+}
+
 func TestResolveRejectsProviderMismatch(t *testing.T) {
 	s := snap(candidate("claude-sonnet-4-5", "Claude Sonnet 4.5", "OpenAI", 90, 1))
 	catalog := catalog(model("anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5"))

@@ -27,6 +27,9 @@ func TestSelectPrintsPlanFromCache(t *testing.T) {
 			t.Errorf("select output missing %q\n---\n%s", want, got)
 		}
 	}
+	if strings.Contains(got, "BLENDED$/1M") {
+		t.Errorf("unmapped select output should not show pricing\n---\n%s", got)
+	}
 	if strings.Contains(got, "cheap-low") {
 		t.Errorf("cheap-low should not qualify at p=0.5\n---\n%s", got)
 	}

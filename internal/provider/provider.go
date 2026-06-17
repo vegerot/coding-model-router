@@ -11,7 +11,7 @@ import (
 	"net/http"
 )
 
-// Provider fetches benchmark + pricing data for a set of models.
+// Provider fetches benchmark data for a set of models.
 type Provider interface {
 	// Name identifies the provider in snapshots and logs, e.g. "artificial-analysis".
 	Name() string
