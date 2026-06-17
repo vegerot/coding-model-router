@@ -23,14 +23,14 @@ func Mappings(args []string, stdout, stderr io.Writer) int {
 		doRefresh      = fs.Bool("refresh", false, "refresh both snapshot and OpenRouter catalog caches")
 		asJSON         = fs.Bool("json", false, "emit mapping diagnostics as JSON instead of a table")
 		cachePath      = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		apiKey         = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		aaApiKey         = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		openRouterPath = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	s, report, code := loadMappingReport(*cachePath, *openRouterPath, *doRefresh, *apiKey, stderr)
+	s, report, code := loadMappingReport(*cachePath, *openRouterPath, *doRefresh, *aaApiKey, stderr)
 	if s == nil {
 		return code
 	}
@@ -106,15 +106,15 @@ func topUnmapped(report mapping.Report, limit int) []mapping.Result {
 	return rows
 }
 
-func loadMappedSnapshot(cachePath, openRouterPath string, doRefresh bool, apiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
-	s, report, code := loadMappingReport(cachePath, openRouterPath, doRefresh, apiKey, stderr)
+func loadMappedSnapshot(cachePath, openRouterPath string, doRefresh bool, aaApiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
+	s, report, code := loadMappingReport(cachePath, openRouterPath, doRefresh, aaApiKey, stderr)
 	if s == nil {
 		return nil, mapping.Report{}, code
 	}
 	return mapping.MappedSnapshot(s, report), report, code
 }
 
-func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, apiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
+func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, aaApiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
 	path, err := resolveSnapshotPath(cachePath)
 	if err != nil {
 		fmt.Fprintf(stderr, "router: %v\n", err)
@@ -126,7 +126,7 @@ func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, apiKey 
 		return nil, mapping.Report{}, 1
 	}
 
-	s, code := load(path, doRefresh, apiKey, stderr)
+	s, code := load(path, doRefresh, aaApiKey, stderr)
 	if s == nil {
 		return nil, mapping.Report{}, code
 	}

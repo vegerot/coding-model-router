@@ -23,7 +23,7 @@ func Select(args []string, stdout, stderr io.Writer) int {
 		doRefresh                    = fs.Bool("refresh", false, "force a re-fetch even if a cached snapshot exists")
 		asJSON                       = fs.Bool("json", false, "emit the selection plan as JSON instead of a table")
 		cachePath                    = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		apiKey                       = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		aaApiKey                       = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		showUnmappedOpenRouterModels = fs.Bool("show-unmapped-openrouter-models", false, "include candidates without resolved OpenRouter model IDs")
 		openRouterPath               = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)
@@ -42,13 +42,13 @@ func Select(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "router: %v\n", err)
 			return 1
 		}
-		s, code = load(path, *doRefresh, *apiKey, stderr)
+		s, code = load(path, *doRefresh, *aaApiKey, stderr)
 		if s == nil {
 			return code
 		}
 	} else {
 		var report mapping.Report
-		s, report, code = loadMappedSnapshot(*cachePath, *openRouterPath, *doRefresh, *apiKey, stderr)
+		s, report, code = loadMappedSnapshot(*cachePath, *openRouterPath, *doRefresh, *aaApiKey, stderr)
 		if s == nil {
 			return code
 		}
