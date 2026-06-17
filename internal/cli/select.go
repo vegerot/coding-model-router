@@ -31,34 +31,27 @@ func Select(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	path, err := resolveSnapshotPath(*cachePath)
-	if err != nil {
-		fmt.Fprintf(stderr, "router: %v\n", err)
-		return 1
-	}
-	s, _, code := load(path, *doRefresh, *apiKey, stderr)
-	if s == nil {
-		return code
-	}
-
-	var mappingSummary *mapping.Summary
-	if !*showUnmappedOpenRouterModels {
-		catalogPath, err := resolveOpenRouterCatalogPath(*openRouterPath)
+	var (
+		s              *snapshot.Snapshot
+		code           int
+		mappingSummary *mapping.Summary
+	)
+	if *showUnmappedOpenRouterModels {
+		path, err := resolveSnapshotPath(*cachePath)
 		if err != nil {
 			fmt.Fprintf(stderr, "router: %v\n", err)
 			return 1
 		}
-		catalog, catalogCode := loadOpenRouterCatalog(catalogPath, *doRefresh, stderr)
-		if catalog == nil {
-			return catalogCode
+		s, _, code = load(path, *doRefresh, *apiKey, stderr)
+		if s == nil {
+			return code
 		}
-		code = combineCodes(code, catalogCode)
-		report, err := mapping.Resolve(s, catalog)
-		if err != nil {
-			fmt.Fprintf(stderr, "router: %v\n", err)
-			return 1
+	} else {
+		var report mapping.Report
+		s, report, code = loadMappedSnapshot(*cachePath, *openRouterPath, *doRefresh, *apiKey, stderr)
+		if s == nil {
+			return code
 		}
-		s = mapping.MappedSnapshot(s, report)
 		mappingSummary = &report.Summary
 	}
 

@@ -30,30 +30,9 @@ func Mappings(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	path, err := resolveSnapshotPath(*cachePath)
-	if err != nil {
-		fmt.Fprintf(stderr, "router: %v\n", err)
-		return 1
-	}
-	catalogPath, err := resolveOpenRouterCatalogPath(*openRouterPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "router: %v\n", err)
-		return 1
-	}
-
-	s, _, snapshotCode := load(path, *doRefresh, *apiKey, stderr)
+	s, report, code := loadMappingReport(*cachePath, *openRouterPath, *doRefresh, *apiKey, stderr)
 	if s == nil {
-		return snapshotCode
-	}
-	catalog, catalogCode := loadOpenRouterCatalog(catalogPath, *doRefresh, stderr)
-	if catalog == nil {
-		return catalogCode
-	}
-
-	report, err := mapping.Resolve(s, catalog)
-	if err != nil {
-		fmt.Fprintf(stderr, "router: %v\n", err)
-		return 1
+		return code
 	}
 
 	if *asJSON {
@@ -68,11 +47,11 @@ func Mappings(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "router: encode JSON: %v\n", err)
 			return 1
 		}
-		return combineCodes(snapshotCode, catalogCode)
+		return code
 	}
 
 	renderMappings(stdout, s, report)
-	return combineCodes(snapshotCode, catalogCode)
+	return code
 }
 
 type mappingsJSON struct {
@@ -125,6 +104,43 @@ func topUnmapped(report mapping.Report, limit int) []mapping.Result {
 		rows = rows[:limit]
 	}
 	return rows
+}
+
+func loadMappedSnapshot(cachePath, openRouterPath string, doRefresh bool, apiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
+	s, report, code := loadMappingReport(cachePath, openRouterPath, doRefresh, apiKey, stderr)
+	if s == nil {
+		return nil, mapping.Report{}, code
+	}
+	return mapping.MappedSnapshot(s, report), report, code
+}
+
+func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, apiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
+	path, err := resolveSnapshotPath(cachePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "router: %v\n", err)
+		return nil, mapping.Report{}, 1
+	}
+	catalogPath, err := resolveOpenRouterCatalogPath(openRouterPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "router: %v\n", err)
+		return nil, mapping.Report{}, 1
+	}
+
+	s, _, code := load(path, doRefresh, apiKey, stderr)
+	if s == nil {
+		return nil, mapping.Report{}, code
+	}
+	catalog, catalogCode := loadOpenRouterCatalog(catalogPath, doRefresh, stderr)
+	if catalog == nil {
+		return nil, mapping.Report{}, catalogCode
+	}
+	code = combineCodes(code, catalogCode)
+	report, err := mapping.Resolve(s, catalog)
+	if err != nil {
+		fmt.Fprintf(stderr, "router: %v\n", err)
+		return nil, mapping.Report{}, 1
+	}
+	return s, report, code
 }
 
 func resolveOpenRouterCatalogPath(path string) (string, error) {

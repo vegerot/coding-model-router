@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/vegerot/coding-model-router/internal/mapping"
 	"github.com/vegerot/coding-model-router/internal/proxy"
 )
 
@@ -31,33 +30,10 @@ func Serve(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	path, err := resolveSnapshotPath(*cachePath)
-	if err != nil {
-		fmt.Fprintf(stderr, "router: %v\n", err)
-		return 1
-	}
-	catalogPath, err := resolveOpenRouterCatalogPath(*openRouterPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "router: %v\n", err)
-		return 1
-	}
-
-	s, _, code := load(path, *doRefresh, *apiKey, stderr)
-	if s == nil {
+	mapped, _, code := loadMappedSnapshot(*cachePath, *openRouterPath, *doRefresh, *apiKey, stderr)
+	if mapped == nil {
 		return code
 	}
-	catalog, catalogCode := loadOpenRouterCatalog(catalogPath, *doRefresh, stderr)
-	if catalog == nil {
-		return catalogCode
-	}
-	code = combineCodes(code, catalogCode)
-
-	report, err := mapping.Resolve(s, catalog)
-	if err != nil {
-		fmt.Fprintf(stderr, "router: %v\n", err)
-		return 1
-	}
-	mapped := mapping.MappedSnapshot(s, report)
 	if len(mapped.Candidates) == 0 {
 		fmt.Fprintln(stderr, "router: no candidates resolved to OpenRouter IDs; nothing to route")
 		return 1
@@ -86,7 +62,7 @@ func Serve(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "router serve: listening on http://%s · default p=%.4g · %d mapped candidates\n",
 		*addr, *p, len(mapped.Candidates))
-	fmt.Fprintln(stdout, s.Attribution)
+	fmt.Fprintln(stdout, mapped.Attribution)
 
 	httpSrv := &http.Server{
 		Addr:              *addr,
