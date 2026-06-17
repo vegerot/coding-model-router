@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CatalogSchemaVersion = 1
+	CatalogSchemaVersion = 2
 	CatalogURL           = "https://openrouter.ai/api/v1/models"
 	CatalogSource        = "openrouter"
 )
@@ -35,6 +35,13 @@ type OpenRouterModel struct {
 	Name          string       `json:"name"`
 	ContextLength int          `json:"context_length,omitempty"`
 	Architecture  Architecture `json:"architecture,omitempty"`
+	Pricing       Pricing      `json:"pricing,omitempty"`
+}
+
+type Pricing struct {
+	Prompt         string `json:"prompt,omitempty"`
+	Completion     string `json:"completion,omitempty"`
+	InputCacheRead string `json:"input_cache_read,omitempty"`
 }
 
 type Architecture struct {

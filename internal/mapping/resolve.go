@@ -3,6 +3,7 @@ package mapping
 import (
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -55,6 +56,9 @@ type Match struct {
 	ID            string `json:"id"`
 	CanonicalSlug string `json:"canonicalSlug,omitempty"`
 	Name          string `json:"name,omitempty"`
+	PromptPrice   string `json:"promptPrice,omitempty"`
+	OutputPrice   string `json:"outputPrice,omitempty"`
+	CacheHitPrice string `json:"cacheHitPrice,omitempty"`
 }
 
 func Resolve(s *snapshot.Snapshot, catalog *Catalog) (Report, error) {
@@ -106,6 +110,9 @@ func MappedSnapshot(s *snapshot.Snapshot, report Report) *snapshot.Snapshot {
 		}
 		c := r.Candidate
 		c.OpenRouterID = r.OpenRouterID
+		if len(r.Matches) == 1 {
+			applyOpenRouterPricing(&c, r.Matches[0])
+		}
 		bySlug[c.Slug] = c
 	}
 	out := *s
@@ -115,6 +122,14 @@ func MappedSnapshot(s *snapshot.Snapshot, report Report) *snapshot.Snapshot {
 			out.Candidates = append(out.Candidates, mapped)
 		}
 	}
+	sort.SliceStable(out.Candidates, func(i, j int) bool {
+		a, b := out.Candidates[i], out.Candidates[j]
+		if a.BlendedPricePer1M != b.BlendedPricePer1M {
+			return a.BlendedPricePer1M < b.BlendedPricePer1M
+		}
+		return a.Slug < b.Slug
+	})
+	out.Attribution = "Quality data: Artificial Analysis (https://artificialanalysis.ai). Pricing and model IDs: OpenRouter (https://openrouter.ai)."
 	return &out
 }
 
@@ -207,7 +222,39 @@ func keysetsIntersect(left, right map[string]struct{}) bool {
 }
 
 func modelMatch(m OpenRouterModel) Match {
-	return Match{ID: m.ID, CanonicalSlug: m.CanonicalSlug, Name: m.Name}
+	return Match{
+		ID:            m.ID,
+		CanonicalSlug: m.CanonicalSlug,
+		Name:          m.Name,
+		PromptPrice:   m.Pricing.Prompt,
+		OutputPrice:   m.Pricing.Completion,
+		CacheHitPrice: m.Pricing.InputCacheRead,
+	}
+}
+
+func applyOpenRouterPricing(c *snapshot.Candidate, m Match) {
+	in, inOK := openRouterPricePer1M(m.PromptPrice)
+	out, outOK := openRouterPricePer1M(m.OutputPrice)
+	if !inOK || !outOK {
+		return
+	}
+	c.InputPricePer1M = in
+	c.OutputPricePer1M = out
+	c.BlendedPricePer1M = (3*in + out) / 4
+	if cacheHit, ok := openRouterPricePer1M(m.CacheHitPrice); ok {
+		c.CacheHitPricePer1M = cacheHit
+	}
+}
+
+func openRouterPricePer1M(value string) (float64, bool) {
+	if value == "" {
+		return 0, false
+	}
+	price, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, false
+	}
+	return price * 1_000_000, true
 }
 
 func stripProviderPrefix(value string) string {

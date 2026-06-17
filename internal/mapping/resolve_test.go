@@ -71,6 +71,33 @@ func TestMappedSnapshotKeepsOnlyMappedCandidates(t *testing.T) {
 	}
 }
 
+func TestMappedSnapshotUsesOpenRouterPricing(t *testing.T) {
+	s := snap(
+		candidate("gemma-4-31b", "Gemma 4 31B", "Google", 40, 0),
+		candidate("cheap", "Cheap", "Test", 30, 1),
+	)
+	catalog := catalog(
+		modelWithPricing("google/gemma-4-31b-it", "Gemma 4 31B", "0.00000012", "0.00000035", "0.00000009"),
+		modelWithPricing("test/cheap", "Cheap", "0.00000001", "0.00000001", ""),
+	)
+	report, err := mapping.Resolve(s, catalog)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	mapped := mapping.MappedSnapshot(s, report)
+	bySlug := candidatesBySlug(mapped.Candidates)
+	gemma := bySlug["gemma-4-31b"]
+	if gemma.InputPricePer1M != 0.12 || gemma.OutputPricePer1M != 0.35 || gemma.CacheHitPricePer1M != 0.09 {
+		t.Fatalf("gemma prices = %+v", gemma)
+	}
+	if gemma.BlendedPricePer1M != 0.1775 {
+		t.Fatalf("gemma blended = %g, want 0.1775", gemma.BlendedPricePer1M)
+	}
+	if mapped.Candidates[0].Slug != "cheap" || mapped.Candidates[1].Slug != "gemma-4-31b" {
+		t.Fatalf("mapped candidates not sorted by OpenRouter price: %+v", mapped.Candidates)
+	}
+}
 func TestResolveRejectsProviderMismatch(t *testing.T) {
 	s := snap(candidate("claude-sonnet-4-5", "Claude Sonnet 4.5", "OpenAI", 90, 1))
 	catalog := catalog(model("anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5"))
@@ -150,4 +177,22 @@ func catalog(models ...mapping.OpenRouterModel) *mapping.Catalog {
 
 func model(id, name string) mapping.OpenRouterModel {
 	return mapping.OpenRouterModel{ID: id, CanonicalSlug: id, Name: name}
+}
+
+func modelWithPricing(id, name, prompt, completion, cacheRead string) mapping.OpenRouterModel {
+	m := model(id, name)
+	m.Pricing = mapping.Pricing{
+		Prompt:         prompt,
+		Completion:     completion,
+		InputCacheRead: cacheRead,
+	}
+	return m
+}
+
+func candidatesBySlug(cands []snapshot.Candidate) map[string]snapshot.Candidate {
+	out := make(map[string]snapshot.Candidate, len(cands))
+	for _, c := range cands {
+		out[c.Slug] = c
+	}
+	return out
 }
