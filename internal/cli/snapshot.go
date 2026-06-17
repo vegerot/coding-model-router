@@ -50,7 +50,7 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 		path = p
 	}
 
-	s, _, code := load(path, *doRefresh, *apiKey, stderr)
+	s, code := load(path, *doRefresh, *apiKey, stderr)
 	if s == nil {
 		return code
 	}
@@ -72,11 +72,11 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 // load returns the snapshot to display plus the exit code. A nil snapshot means
 // fatal (code is 1). When a refresh fails but a cached snapshot is served, stale
 // is true and code is 2.
-func load(path string, doRefresh bool, apiKey string, stderr io.Writer) (s *snapshot.Snapshot, stale bool, code int) {
+func load(path string, doRefresh bool, apiKey string, stderr io.Writer) (s *snapshot.Snapshot, code int) {
 	// Fast path: print from cache without touching the network.
 	if !doRefresh {
 		if cached, err := snapshot.Load(path); err == nil {
-			return cached, false, 0
+			return cached, 0
 		}
 		// No usable cache → fall through and fetch.
 	}
@@ -97,12 +97,12 @@ func load(path string, doRefresh bool, apiKey string, stderr io.Writer) (s *snap
 	if err != nil {
 		if fresh != nil && wasStale {
 			// Served last-good; warnings were already printed by Refresh.
-			return fresh, true, 2
+			return fresh, 2
 		}
 		fmt.Fprintf(stderr, "router: %v\n", err)
-		return nil, false, 1
+		return nil, 1
 	}
-	return fresh, false, 0
+	return fresh, 0
 }
 
 func renderTable(w io.Writer, s *snapshot.Snapshot) {

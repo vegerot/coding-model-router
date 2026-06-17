@@ -42,7 +42,7 @@ func Select(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "router: %v\n", err)
 			return 1
 		}
-		s, _, code = load(path, *doRefresh, *apiKey, stderr)
+		s, code = load(path, *doRefresh, *apiKey, stderr)
 		if s == nil {
 			return code
 		}

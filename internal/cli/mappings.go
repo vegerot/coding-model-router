@@ -126,7 +126,7 @@ func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, apiKey 
 		return nil, mapping.Report{}, 1
 	}
 
-	s, _, code := load(path, doRefresh, apiKey, stderr)
+	s, code := load(path, doRefresh, apiKey, stderr)
 	if s == nil {
 		return nil, mapping.Report{}, code
 	}
