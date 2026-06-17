@@ -86,8 +86,8 @@ client (aider / Claude Code / curl)
 
 ```
 cmd/router/            CLI: subcommand dispatch + `snapshot` (M1), `select` (M2), `mappings` (M3)
-internal/provider/     BenchmarkProvider interface + provider-agnostic Model record
-internal/provider/aa/  Artificial Analysis Data API provider (default)
+internal/benchmark_provider/     BenchmarkProvider interface + provider-agnostic Model record
+internal/benchmark_provider/aa/  Artificial Analysis Data API provider (default)
 internal/snapshot/     Snapshot/Candidate types, NormalizedQuality + CostScores, store
 internal/refresh/      pure Build (Model→Snapshot), validation, Refresh orchestrator
 internal/engine/       (M2) pure Select(snapshot, p, opts) → routing plan
@@ -104,7 +104,7 @@ and `refresh`.
 ## Pluggable provider interface
 
 ```go
-// internal/provider
+// internal/benchmark_provider
 type Provider interface {
     Name() string                                            // e.g. "artificial-analysis"
     Fetch(ctx context.Context, c *http.Client) ([]Model, error)
@@ -132,7 +132,7 @@ interface. Aider is the most likely second provider: its
 `polyglot_leaderboard.yml` carries `pass_rate_2` (quality), `total_cost` (USD),
 and `prompt_tokens`/`completion_tokens`, under Apache-2.0.
 
-### Artificial Analysis provider (`internal/provider/aa`)
+### Artificial Analysis provider (`internal/benchmark_provider/aa`)
 
 - Endpoint: `GET https://artificialanalysis.ai/api/v2/language/models/free`,
   header `x-api-key: $AA_API_KEY`. Paginated (`page` query param, 200/page,

@@ -1,10 +1,10 @@
 // Package provider defines the pluggable benchmark-data interface and the
 // provider-agnostic Model record that every provider returns. The data layer
 // (internal/refresh) consumes Providers without knowing which benchmark or API
-// backs them; today the only implementation is internal/provider/aa
+// backs them; today the only implementation is internal/benchmark_provider/aa
 // (Artificial Analysis Data API), but Aider, SWE-bench, etc. can be added by
 // implementing this interface.
-package provider
+package benchmark_provider
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 )
 
 // Provider fetches benchmark data for a set of models.
-type Provider interface {
+type BenchmarkProvider interface {
 	// Name identifies the provider in snapshots and logs, e.g. "artificial-analysis".
 	Name() string
 	// Fetch returns one Model per model the provider knows about. The client may

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/vegerot/coding-model-router/internal/provider"
+	"github.com/vegerot/coding-model-router/internal/benchmark_provider"
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
 
@@ -19,7 +19,7 @@ const minCandidateCodingIndex = 20.0
 // coding index or models below the minimum coding-index eligibility floor
 // (recording each with a reason), and sorts candidates by descending quality.
 // It is pure — validation is a separate step (Validate).
-func Build(models []provider.Model, providerName string, fetchedAt time.Time) *snapshot.Snapshot {
+func Build(models []benchmark_provider.Model, providerName string, fetchedAt time.Time) *snapshot.Snapshot {
 	s := &snapshot.Snapshot{
 		SchemaVersion: snapshot.SchemaVersion,
 		FetchedAt:     fetchedAt,
@@ -57,7 +57,7 @@ func Build(models []provider.Model, providerName string, fetchedAt time.Time) *s
 }
 
 // dropReason returns why a model cannot become a candidate, or "" if it can.
-func dropReason(m provider.Model) string {
+func dropReason(m benchmark_provider.Model) string {
 	switch {
 	case m.Slug == "":
 		return "empty slug"

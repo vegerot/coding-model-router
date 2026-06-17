@@ -1,4 +1,4 @@
-package provider
+package benchmark_provider
 
 import (
 	"context"

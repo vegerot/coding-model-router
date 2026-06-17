@@ -1,11 +1,11 @@
 //go:build live
 
-// Live shape-contract test for the Artificial Analysis provider. Skipped by the
+// Live shape-contract test for the Artificial Analysis benchmark_provider. Skipped by the
 // default `go test`; run with `make live-test` (= `go test -tags live ./...`).
 // It hits the real AA Data API and asserts the free-tier response still has the
 // shape the data layer assumes. A failure means AA changed its API — update the
 // wire types / assumptions. Requires AA_API_KEY in the environment.
-package provider_test
+package benchmark_provider_test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vegerot/coding-model-router/internal/provider"
+	"github.com/vegerot/coding-model-router/internal/benchmark_provider"
 )
 
 func TestLiveAAShape(t *testing.T) {
@@ -25,7 +25,7 @@ func TestLiveAAShape(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	models, err := provider.NewAA(key).Fetch(ctx, nil)
+	models, err := benchmark_provider.NewAA(key).Fetch(ctx, nil)
 	if err != nil {
 		t.Fatalf("live AA fetch failed: %v", err)
 	}

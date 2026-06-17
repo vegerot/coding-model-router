@@ -1,4 +1,4 @@
-package provider_test
+package benchmark_provider_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/vegerot/coding-model-router/internal/provider"
+	"github.com/vegerot/coding-model-router/internal/benchmark_provider"
 )
 
 const apiKeyHeader = "x-api-key"
@@ -39,7 +39,7 @@ func TestAAFetchPaginatesAndMaps(t *testing.T) {
 	srv := fixtureServer(t, &gotKey)
 	defer srv.Close()
 
-	p := provider.NewAAWithBaseURL("test-key", srv.URL)
+	p := benchmark_provider.NewAAWithBaseURL("test-key", srv.URL)
 	models, err := p.Fetch(context.Background(), srv.Client())
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
@@ -72,7 +72,7 @@ func TestAAFetchPaginatesAndMaps(t *testing.T) {
 	}
 
 	// The edge model carries null coding index; Fetch passes it through as nil.
-	var edge *provider.Model
+	var edge *benchmark_provider.Model
 	for i := range models {
 		if models[i].Slug == "edge-no-coding" {
 			edge = &models[i]
@@ -87,7 +87,7 @@ func TestAAFetchPaginatesAndMaps(t *testing.T) {
 }
 
 func TestAAFetchRequiresKey(t *testing.T) {
-	p := provider.NewAAWithBaseURL("", "http://example.invalid")
+	p := benchmark_provider.NewAAWithBaseURL("", "http://example.invalid")
 	if _, err := p.Fetch(context.Background(), http.DefaultClient); err == nil {
 		t.Error("expected error when API key is empty, got nil")
 	}
@@ -98,16 +98,16 @@ func TestAAFetchNon200(t *testing.T) {
 		http.Error(w, `{"error":"rate limited"}`, http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
-	p := provider.NewAAWithBaseURL("k", srv.URL)
+	p := benchmark_provider.NewAAWithBaseURL("k", srv.URL)
 	if _, err := p.Fetch(context.Background(), srv.Client()); err == nil {
 		t.Error("expected error on 429, got nil")
 	}
 }
 
 func TestAAName(t *testing.T) {
-	if provider.NewAA("k").Name() != "artificial-analysis" {
-		t.Errorf("Name() = %q", provider.NewAA("k").Name())
+	if benchmark_provider.NewAA("k").Name() != "artificial-analysis" {
+		t.Errorf("Name() = %q", benchmark_provider.NewAA("k").Name())
 	}
 	// Compile-time check that *AA satisfies Provider.
-	var _ provider.Provider = (*provider.AA)(nil)
+	var _ benchmark_provider.BenchmarkProvider = (*benchmark_provider.AA)(nil)
 }

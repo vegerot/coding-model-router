@@ -11,16 +11,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vegerot/coding-model-router/internal/provider"
+	"github.com/vegerot/coding-model-router/internal/benchmark_provider"
 	"github.com/vegerot/coding-model-router/internal/refresh"
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
 
 func ptr(f float64) *float64 { return &f }
 
-// validModel is a fully-populated provider.Model that survives Build's filter.
-func validModel(slug string, coding, in, out float64) provider.Model {
-	return provider.Model{
+// validModel is a fully-populated benchmark_provider.Model that survives Build's filter.
+func validModel(slug string, coding, in, out float64) benchmark_provider.Model {
+	return benchmark_provider.Model{
 		Slug: slug, Name: slug, Creator: "Test",
 		CodingIndex: ptr(coding), AgenticIndex: ptr(coding + 1), IntelligenceIndex: ptr(coding + 2),
 		InputPricePer1M: ptr(in), OutputPricePer1M: ptr(out),
@@ -29,8 +29,8 @@ func validModel(slug string, coding, in, out float64) provider.Model {
 }
 
 // manyValid returns n valid models with spread-out quality and price.
-func manyValid(n int) []provider.Model {
-	out := make([]provider.Model, n)
+func manyValid(n int) []benchmark_provider.Model {
+	out := make([]benchmark_provider.Model, n)
 	for i := range out {
 		out[i] = validModel(fmt.Sprintf("m-%02d", i), 20+float64(i), 1+float64(i), 4+float64(i))
 	}
@@ -48,7 +48,7 @@ func at() time.Time {
 }
 
 func TestBuildFiltersAndComputes(t *testing.T) {
-	models := []provider.Model{
+	models := []benchmark_provider.Model{
 		{
 			Slug: "good", Name: "good", Creator: "Test",
 			CodingIndex: ptr(50), AgenticIndex: ptr(51), IntelligenceIndex: ptr(52), EvalTotalCostUSD: ptr(400),
@@ -91,7 +91,7 @@ func TestBuildFiltersAndComputes(t *testing.T) {
 }
 
 func TestBuildSortsByQualityDescending(t *testing.T) {
-	models := []provider.Model{
+	models := []benchmark_provider.Model{
 		validModel("mid", 45, 4, 16),
 		validModel("top", 60, 20, 40),
 		validModel("cheap", 30, 0, 4),
@@ -107,7 +107,7 @@ func TestBuildSortsByQualityDescending(t *testing.T) {
 }
 
 func TestBuildDropsModelsBelowMinimumCodingIndex(t *testing.T) {
-	models := []provider.Model{
+	models := []benchmark_provider.Model{
 		validModel("too-small", 19.9, 1, 4),
 		validModel("threshold", 20.0, 2, 8),
 		validModel("above-threshold", 20.1, 3, 12),
@@ -143,7 +143,7 @@ func TestValidate(t *testing.T) {
 		// the candidate floor (>=30) is what must fail.
 		models := manyValid(10)
 		for i := 0; i < 50; i++ {
-			models = append(models, provider.Model{Slug: fmt.Sprintf("bad-%02d", i), InputPricePer1M: ptr(1), OutputPricePer1M: ptr(2)})
+			models = append(models, benchmark_provider.Model{Slug: fmt.Sprintf("bad-%02d", i), InputPricePer1M: ptr(1), OutputPricePer1M: ptr(2)})
 		}
 		s := refresh.Build(models, "p", at())
 		if s.Sources.ModelCount != 60 {
@@ -154,7 +154,7 @@ func TestValidate(t *testing.T) {
 		}
 	})
 	t.Run("quality scale guard fails when all scores tiny", func(t *testing.T) {
-		models := make([]provider.Model, 60)
+		models := make([]benchmark_provider.Model, 60)
 		for i := range models {
 			models[i] = validModel(fmt.Sprintf("t-%02d", i), 0.3, 1+float64(i), 4) // max coding 0.3
 		}
@@ -234,16 +234,16 @@ func TestRefreshNoCacheNoData(t *testing.T) {
 	}
 }
 
-// stubProvider implements provider.Provider for Refresh tests.
+// stubProvider implements benchmark_provider.BenchmarkProvider for Refresh tests.
 type stubProvider struct {
 	name   string
-	models []provider.Model
+	models []benchmark_provider.Model
 	err    error
 }
 
 func (s *stubProvider) Name() string { return s.name }
 
-func (s *stubProvider) Fetch(context.Context, *http.Client) ([]provider.Model, error) {
+func (s *stubProvider) Fetch(context.Context, *http.Client) ([]benchmark_provider.Model, error) {
 	if s.err != nil {
 		return nil, s.err
 	}

@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/vegerot/coding-model-router/internal/provider"
+	"github.com/vegerot/coding-model-router/internal/benchmark_provider"
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
 
 // Options configures a Refresh. Provider and CachePath are required; the rest
 // have sensible zero-value defaults.
 type Options struct {
-	Provider  provider.Provider // benchmark data source (required)
+	Provider  benchmark_provider.BenchmarkProvider // benchmark data source (required)
 	CachePath string            // where the snapshot is persisted (required)
 	Client    *http.Client      // HTTP client; nil → http.DefaultClient
 	Now       func() time.Time  // clock; nil → time.Now

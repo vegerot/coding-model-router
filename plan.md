@@ -50,7 +50,7 @@ M4 and later.
   `BlendedPricePer1M` cost axis, informational `EvalTotalCostUSD`).
   `NormalizedQuality` (set-dependent min-max; single→1.0). Atomic `Save`,
   schema-checked `Load`. Tests in `snapshot_test`.
-- [x] **M1.2 — `internal/provider`.** `Provider` interface (`Name`, `Fetch`) +
+- [x] **M1.2 — `internal/benchmark_provider`.** `Provider` interface (`Name`, `Fetch`) +
   provider-agnostic `Model`. `AA` implements it against the AA Data API free tier
   (paginated, `x-api-key`, maps coding/agentic/intelligence + pricing +
   total_cost). Black-box tests + `//go:build live` shape-contract test.
@@ -161,3 +161,4 @@ M4 and later.
   * calibration
   * shadow/A-B
   * tunable cost weighting
+  * rename provider to benchmark_provider (or similar)

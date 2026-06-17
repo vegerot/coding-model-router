@@ -13,7 +13,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/vegerot/coding-model-router/internal/provider"
+	"github.com/vegerot/coding-model-router/internal/benchmark_provider"
 	"github.com/vegerot/coding-model-router/internal/refresh"
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
@@ -90,7 +90,7 @@ func load(path string, doRefresh bool, aaApiKey string, stderr io.Writer) (s *sn
 	defer cancel()
 
 	fresh, wasStale, err := refresh.Refresh(ctx, refresh.Options{
-		Provider:  provider.NewAA(key),
+		Provider:  benchmark_provider.NewAA(key),
 		CachePath: path,
 		Stderr:    stderr,
 	})

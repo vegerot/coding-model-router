@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vegerot/coding-model-router/internal/provider"
+	"github.com/vegerot/coding-model-router/internal/benchmark_provider"
 	"github.com/vegerot/coding-model-router/internal/refresh"
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
@@ -31,7 +31,7 @@ func TestLiveRefreshEndToEnd(t *testing.T) {
 	defer cancel()
 
 	s, stale, err := refresh.Refresh(ctx, refresh.Options{
-		Provider:  provider.NewAA(key),
+		Provider:  benchmark_provider.NewAA(key),
 		CachePath: path,
 		Stderr:    io.Discard,
 	})
@@ -47,8 +47,8 @@ func TestLiveRefreshEndToEnd(t *testing.T) {
 	if len(s.Candidates) < 30 {
 		t.Errorf("expected >=30 live candidates, got %d", len(s.Candidates))
 	}
-	if s.Sources.Provider != provider.AAName {
-		t.Errorf("provider = %q, want %q", s.Sources.Provider, provider.AAName)
+	if s.Sources.Provider != benchmark_provider.AAName {
+		t.Errorf("provider = %q, want %q", s.Sources.Provider, benchmark_provider.AAName)
 	}
 	// Candidates must be sorted descending by quality.
 	for i := 1; i < len(s.Candidates); i++ {
