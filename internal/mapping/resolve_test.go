@@ -98,6 +98,45 @@ func TestMappedSnapshotUsesOpenRouterPricing(t *testing.T) {
 		t.Fatalf("mapped candidates not sorted by OpenRouter price: %+v", mapped.Candidates)
 	}
 }
+func TestMappedSnapshotDeduplicatesOpenRouterIDs(t *testing.T) {
+	s := snap(
+		candidate("same-high", "Same High", "Test", 40, 1),
+		candidate("same-low", "Same Low", "Test", 30, 1),
+		candidate("other", "Other", "Test", 35, 2),
+	)
+	report := mapping.Report{Results: []mapping.Result{
+		{
+			Candidate:    s.Candidates[0],
+			Status:       mapping.StatusMapped,
+			OpenRouterID: "test/same",
+			Matches:      []mapping.Match{{ID: "test/same", PromptPrice: "0.00000001", OutputPrice: "0.00000001"}},
+		},
+		{
+			Candidate:    s.Candidates[1],
+			Status:       mapping.StatusMapped,
+			OpenRouterID: "test/same",
+			Matches:      []mapping.Match{{ID: "test/same", PromptPrice: "0.00000001", OutputPrice: "0.00000001"}},
+		},
+		{
+			Candidate:    s.Candidates[2],
+			Status:       mapping.StatusMapped,
+			OpenRouterID: "test/other",
+			Matches:      []mapping.Match{{ID: "test/other", PromptPrice: "0.00000002", OutputPrice: "0.00000002"}},
+		},
+	}}
+
+	mapped := mapping.MappedSnapshot(s, report)
+	if len(mapped.Candidates) != 2 {
+		t.Fatalf("mapped candidates = %+v, want 2 deduplicated by OpenRouterID", mapped.Candidates)
+	}
+	if mapped.Candidates[0].Slug != "same-high" || mapped.Candidates[0].OpenRouterID != "test/same" {
+		t.Fatalf("first candidate = %+v, want higher-quality representative for duplicate OpenRouterID", mapped.Candidates[0])
+	}
+	if mapped.Candidates[1].Slug != "other" || mapped.Candidates[1].OpenRouterID != "test/other" {
+		t.Fatalf("second candidate = %+v", mapped.Candidates[1])
+	}
+}
+
 func TestMappedSnapshotDropsModelsMissingOpenRouterPricing(t *testing.T) {
 	s := snap(candidate("free", "Free", "Test", 30, 0))
 	catalog := catalog(model("test/free", "Free"))

@@ -104,6 +104,7 @@ func MappedSnapshot(s *snapshot.Snapshot, report Report) *snapshot.Snapshot {
 		return nil
 	}
 	bySlug := make(map[string]snapshot.Candidate, len(report.Results))
+	byOpenRouterID := make(map[string]snapshot.Candidate, len(report.Results))
 	for _, r := range report.Results {
 		if r.Status != StatusMapped {
 			continue
@@ -114,23 +115,36 @@ func MappedSnapshot(s *snapshot.Snapshot, report Report) *snapshot.Snapshot {
 			continue
 		}
 		bySlug[c.Slug] = c
+		if existing, ok := byOpenRouterID[c.OpenRouterID]; !ok || cheaperForMappedSnapshot(c, existing) {
+			byOpenRouterID[c.OpenRouterID] = c
+		}
 	}
 	out := *s
-	out.Candidates = make([]snapshot.Candidate, 0, len(bySlug))
+	out.Candidates = make([]snapshot.Candidate, 0, len(byOpenRouterID))
 	for _, c := range s.Candidates {
-		if mapped, ok := bySlug[c.Slug]; ok {
+		mapped, ok := bySlug[c.Slug]
+		if !ok {
+			continue
+		}
+		if byOpenRouterID[mapped.OpenRouterID].Slug == mapped.Slug {
 			out.Candidates = append(out.Candidates, mapped)
 		}
 	}
 	sort.SliceStable(out.Candidates, func(i, j int) bool {
-		a, b := out.Candidates[i], out.Candidates[j]
-		if a.BlendedPricePer1M != b.BlendedPricePer1M {
-			return a.BlendedPricePer1M < b.BlendedPricePer1M
-		}
-		return a.Slug < b.Slug
+		return cheaperForMappedSnapshot(out.Candidates[i], out.Candidates[j])
 	})
 	out.Attribution = "Quality data: Artificial Analysis (https://artificialanalysis.ai). Pricing and model IDs: OpenRouter (https://openrouter.ai)."
 	return &out
+}
+
+func cheaperForMappedSnapshot(a, b snapshot.Candidate) bool {
+	if a.BlendedPricePer1M != b.BlendedPricePer1M {
+		return a.BlendedPricePer1M < b.BlendedPricePer1M
+	}
+	if a.Quality != b.Quality {
+		return a.Quality > b.Quality
+	}
+	return a.Slug < b.Slug
 }
 
 func resolveCandidate(c snapshot.Candidate, models []OpenRouterModel) Result {
