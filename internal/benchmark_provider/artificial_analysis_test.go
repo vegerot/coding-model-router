@@ -12,7 +12,7 @@ import (
 
 const apiKeyHeader = "x-api-key"
 
-// fixtureServer serves testdata/aa_page{N}.json keyed by the ?page= param and
+// fixtureServer serves testdata/artificial_analysis_page{N}.json keyed by the ?page= param and
 // records the API key header it saw.
 func fixtureServer(t *testing.T, gotKey *string) *httptest.Server {
 	t.Helper()
@@ -24,7 +24,7 @@ func fixtureServer(t *testing.T, gotKey *string) *httptest.Server {
 		if page == "" {
 			page = "1"
 		}
-		data, err := os.ReadFile("testdata/aa_page" + page + ".json")
+		data, err := os.ReadFile("testdata/artificial_analysis_page" + page + ".json")
 		if err != nil {
 			http.Error(w, "no such page", http.StatusNotFound)
 			return
@@ -62,7 +62,7 @@ func TestAAFetchPaginatesAndMaps(t *testing.T) {
 		t.Errorf("coding index = %v, want 59.1", m.CodingIndex)
 	}
 	if m.InputPricePer1M != nil || m.OutputPricePer1M != nil || m.CacheWritePricePer1M != nil {
-		t.Errorf("AA pricing should be ignored, got in=%v out=%v cache_write=%v", m.InputPricePer1M, m.OutputPricePer1M, m.CacheWritePricePer1M)
+		t.Errorf("ArtificialAnalysis pricing should be ignored, got in=%v out=%v cache_write=%v", m.InputPricePer1M, m.OutputPricePer1M, m.CacheWritePricePer1M)
 	}
 	if m.EvalTotalCostUSD == nil || *m.EvalTotalCostUSD != 3357 {
 		t.Errorf("total_cost = %v, want 3357", m.EvalTotalCostUSD)
@@ -108,6 +108,6 @@ func TestAAName(t *testing.T) {
 	if benchmark_provider.NewAA("k").Name() != "artificial-analysis" {
 		t.Errorf("Name() = %q", benchmark_provider.NewAA("k").Name())
 	}
-	// Compile-time check that *AA satisfies Provider.
-	var _ benchmark_provider.BenchmarkProvider = (*benchmark_provider.AA)(nil)
+	// Compile-time check that *ArtificialAnalysis satisfies Provider.
+	var _ benchmark_provider.BenchmarkProvider = (*benchmark_provider.ArtificialAnalysis)(nil)
 }

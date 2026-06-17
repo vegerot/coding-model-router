@@ -34,7 +34,7 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 		doRefresh = fs.Bool("refresh", false, "force a re-fetch even if a cached snapshot exists")
 		asJSON    = fs.Bool("json", false, "emit the raw snapshot JSON instead of a table")
 		cachePath = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		aaApiKey  = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		artificialAnalysisApiKey  = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -50,7 +50,7 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 		path = p
 	}
 
-	s, code := load(path, *doRefresh, *aaApiKey, stderr)
+	s, code := load(path, *doRefresh, *artificialAnalysisApiKey, stderr)
 	if s == nil {
 		return code
 	}
@@ -72,7 +72,7 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 // load returns the snapshot to display plus the exit code. A nil snapshot means
 // fatal (code is 1). When a refresh fails but a cached snapshot is served, stale
 // is true and code is 2.
-func load(path string, doRefresh bool, aaApiKey string, stderr io.Writer) (s *snapshot.Snapshot, code int) {
+func load(path string, doRefresh bool, artificialAnalysisApiKey string, stderr io.Writer) (s *snapshot.Snapshot, code int) {
 	// Fast path: print from cache without touching the network.
 	if !doRefresh {
 		if cached, err := snapshot.Load(path); err == nil {
@@ -81,7 +81,7 @@ func load(path string, doRefresh bool, aaApiKey string, stderr io.Writer) (s *sn
 		// No usable cache → fall through and fetch.
 	}
 
-	key := aaApiKey
+	key := artificialAnalysisApiKey
 	if key == "" {
 		key = os.Getenv("AA_API_KEY")
 	}

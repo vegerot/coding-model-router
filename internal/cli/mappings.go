@@ -14,7 +14,7 @@ import (
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
 
-// Mappings implements `router mappings`: resolve cached AA snapshot
+// Mappings implements `router mappings`: resolve cached ArtificialAnalysis snapshot
 // candidates to OpenRouter IDs and print diagnostics.
 func Mappings(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("mappings", flag.ContinueOnError)
@@ -22,14 +22,14 @@ func Mappings(args []string, stdout, stderr io.Writer) int {
 	var (
 		asJSON         = fs.Bool("json", false, "emit mapping diagnostics as JSON instead of a table")
 		cachePath      = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		aaApiKey       = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		artificialAnalysisApiKey       = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		openRouterPath = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	s, report, code := loadMappingReport(*cachePath, *openRouterPath, false, *aaApiKey, stderr)
+	s, report, code := loadMappingReport(*cachePath, *openRouterPath, false, *artificialAnalysisApiKey, stderr)
 	if s == nil {
 		return code
 	}
@@ -70,7 +70,7 @@ func renderMappings(w io.Writer, s *snapshot.Snapshot, report mapping.Report) {
 
 	unmapped := topUnmapped(report, 10)
 	if len(unmapped) > 0 {
-		fmt.Fprintln(w, "\nTop unmapped by AA coding quality:")
+		fmt.Fprintln(w, "\nTop unmapped by ArtificialAnalysis coding quality:")
 		tw = tabwriter.NewWriter(w, 0, 2, 2, ' ', 0)
 		fmt.Fprintln(tw, "MODEL\tQUALITY\tCREATOR")
 		for _, r := range unmapped {
@@ -105,15 +105,15 @@ func topUnmapped(report mapping.Report, limit int) []mapping.Result {
 	return rows
 }
 
-func loadMappedSnapshot(cachePath, openRouterPath string, doRefresh bool, aaApiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
-	s, report, code := loadMappingReport(cachePath, openRouterPath, doRefresh, aaApiKey, stderr)
+func loadMappedSnapshot(cachePath, openRouterPath string, doRefresh bool, artificialAnalysisApiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
+	s, report, code := loadMappingReport(cachePath, openRouterPath, doRefresh, artificialAnalysisApiKey, stderr)
 	if s == nil {
 		return nil, mapping.Report{}, code
 	}
 	return mapping.MappedSnapshot(s, report), report, code
 }
 
-func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, aaApiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
+func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, artificialAnalysisApiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
 	path, err := resolveSnapshotPath(cachePath)
 	if err != nil {
 		fmt.Fprintf(stderr, "router: %v\n", err)
@@ -125,7 +125,7 @@ func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, aaApiKe
 		return nil, mapping.Report{}, 1
 	}
 
-	s, code := load(path, doRefresh, aaApiKey, stderr)
+	s, code := load(path, doRefresh, artificialAnalysisApiKey, stderr)
 	if s == nil {
 		return nil, mapping.Report{}, code
 	}

@@ -13,7 +13,7 @@ const (
 	minRawModels        = 50
 	minCandidates       = 30
 	minTopQuality       = 20.0  // a max coding index below this hints at a scale/units change
-	maxPlausibleQuality = 100.0 // AA's coding index is on a 0–100 scale
+	maxPlausibleQuality = 100.0 // ArtificialAnalysis's coding index is on a 0–100 scale
 )
 
 // Validate checks a built snapshot against the tripwire thresholds. A non-nil

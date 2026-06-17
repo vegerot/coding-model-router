@@ -126,7 +126,7 @@ func TestResolveRejectsProviderMismatch(t *testing.T) {
 }
 
 func TestResolveUsesProviderSuppliedOpenRouterID(t *testing.T) {
-	s := snap(candidate("aa-slug", "AA Slug", "OpenAI", 50, 1))
+	s := snap(candidate("aa-slug", "ArtificialAnalysis Slug", "OpenAI", 50, 1))
 	s.Candidates[0].OpenRouterID = "openai/exact"
 	catalog := catalog(model("openai/exact", "Exact"))
 

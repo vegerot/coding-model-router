@@ -19,49 +19,49 @@ const AAName = "artificial-analysis"
 const AADefaultBaseURL = "https://artificialanalysis.ai/api/v2/language/models/free"
 
 const (
-	aaUserAgent = "coding-model-router/0.1 (+github.com/vegerot/coding-model-router)"
-	aaMaxBody   = 16 << 20 // generous cap; a page is ~150KB
-	aaMaxPages  = 25       // safety bound (free tier is ~3 pages) and a daily-quota cap
-	aaAPIKeyHdr = "x-api-key"
+	artificialAnalysisUserAgent = "coding-model-router/0.1 (+github.com/vegerot/coding-model-router)"
+	artificialAnalysisMaxBody   = 16 << 20 // generous cap; a page is ~150KB
+	artificialAnalysisMaxPages  = 25       // safety bound (free tier is ~3 pages) and a daily-quota cap
+	artificialAnalysisAPIKeyHdr = "x-api-key"
 )
 
-// AA implements Provider against the Artificial Analysis Data API free tier. The
+// ArtificialAnalysis implements Provider against the Artificial Analysis Data API free tier. The
 // free endpoint returns model identity, the coding/agentic/intelligence indices,
 // full per-token pricing, and a measured eval cost — everything the data layer
 // needs, in clean paginated JSON. Construct with NewAA; the zero value is unusable.
-type AA struct {
+type ArtificialAnalysis struct {
 	apiKey  string
 	baseURL string
 }
 
-// NewAA returns an AA provider using the given API key and the default endpoint.
-func NewAA(apiKey string) *AA {
-	return &AA{apiKey: apiKey, baseURL: AADefaultBaseURL}
+// NewAA returns an ArtificialAnalysis provider using the given API key and the default endpoint.
+func NewAA(apiKey string) *ArtificialAnalysis {
+	return &ArtificialAnalysis{apiKey: apiKey, baseURL: AADefaultBaseURL}
 }
 
 // NewAAWithBaseURL is like NewAA but overrides the endpoint (used by tests).
-func NewAAWithBaseURL(apiKey, baseURL string) *AA {
-	return &AA{apiKey: apiKey, baseURL: baseURL}
+func NewAAWithBaseURL(apiKey, baseURL string) *ArtificialAnalysis {
+	return &ArtificialAnalysis{apiKey: apiKey, baseURL: baseURL}
 }
 
 // Name implements Provider.
-func (p *AA) Name() string { return AAName }
+func (p *ArtificialAnalysis) Name() string { return AAName }
 
 // --- wire types: only the free-tier fields we consume ---
 
-type aaResponse struct {
+type artificialAnalysisResponse struct {
 	Tier       string        `json:"tier"`
-	Pagination aaPagination  `json:"pagination"`
-	Data       []aaModelJSON `json:"data"`
+	Pagination artificialAnalysisPagination  `json:"pagination"`
+	Data       []artificialAnalysisModelJSON `json:"data"`
 }
 
-type aaPagination struct {
+type artificialAnalysisPagination struct {
 	Page       int  `json:"page"`
 	TotalPages int  `json:"total_pages"`
 	HasMore    bool `json:"has_more"`
 }
 
-type aaModelJSON struct {
+type artificialAnalysisModelJSON struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Slug        string `json:"slug"`
@@ -80,7 +80,7 @@ type aaModelJSON struct {
 }
 
 // Fetch implements Provider, paging through the free endpoint.
-func (p *AA) Fetch(ctx context.Context, client *http.Client) ([]Model, error) {
+func (p *ArtificialAnalysis) Fetch(ctx context.Context, client *http.Client) ([]Model, error) {
 	if p.apiKey == "" {
 		return nil, errors.New("aa: API key is required (set AA_API_KEY or pass --aa-api-key)")
 	}
@@ -89,7 +89,7 @@ func (p *AA) Fetch(ctx context.Context, client *http.Client) ([]Model, error) {
 	}
 
 	var models []Model
-	for page := 1; page <= aaMaxPages; page++ {
+	for page := 1; page <= artificialAnalysisMaxPages; page++ {
 		resp, err := p.fetchPage(ctx, client, page)
 		if err != nil {
 			return nil, err
@@ -107,7 +107,7 @@ func (p *AA) Fetch(ctx context.Context, client *http.Client) ([]Model, error) {
 	return models, nil
 }
 
-func (p *AA) fetchPage(ctx context.Context, client *http.Client, page int) (*aaResponse, error) {
+func (p *ArtificialAnalysis) fetchPage(ctx context.Context, client *http.Client, page int) (*artificialAnalysisResponse, error) {
 	u, err := url.Parse(p.baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("aa: parse base URL: %w", err)
@@ -120,8 +120,8 @@ func (p *AA) fetchPage(ctx context.Context, client *http.Client, page int) (*aaR
 	if err != nil {
 		return nil, fmt.Errorf("aa: build request: %w", err)
 	}
-	req.Header.Set(aaAPIKeyHdr, p.apiKey)
-	req.Header.Set("User-Agent", aaUserAgent)
+	req.Header.Set(artificialAnalysisAPIKeyHdr, p.apiKey)
+	req.Header.Set("User-Agent", artificialAnalysisUserAgent)
 
 	httpResp, err := client.Do(req)
 	if err != nil {
@@ -129,22 +129,22 @@ func (p *AA) fetchPage(ctx context.Context, client *http.Client, page int) (*aaR
 	}
 	defer httpResp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(httpResp.Body, aaMaxBody))
+	body, err := io.ReadAll(io.LimitReader(httpResp.Body, artificialAnalysisMaxBody))
 	if err != nil {
 		return nil, fmt.Errorf("aa: read page %d: %w", page, err)
 	}
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("aa: page %d: unexpected status %s: %s", page, httpResp.Status, aaSnippet(body))
+		return nil, fmt.Errorf("aa: page %d: unexpected status %s: %s", page, httpResp.Status, artificialAnalysisSnippet(body))
 	}
 
-	var resp aaResponse
+	var resp artificialAnalysisResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("aa: decode page %d: %w", page, err)
 	}
 	return &resp, nil
 }
 
-func (m aaModelJSON) toModel() Model {
+func (m artificialAnalysisModelJSON) toModel() Model {
 	return Model{
 		Slug:              m.Slug,
 		Name:              m.Name,
@@ -158,7 +158,7 @@ func (m aaModelJSON) toModel() Model {
 	}
 }
 
-func aaSnippet(b []byte) string {
+func artificialAnalysisSnippet(b []byte) string {
 	const n = 200
 	if len(b) > n {
 		return string(b[:n]) + "…"

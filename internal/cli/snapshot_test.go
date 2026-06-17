@@ -76,7 +76,7 @@ func TestSnapshotPrintsFromCache(t *testing.T) {
 	}
 	// Attribution line is always printed.
 	if !strings.Contains(got, "Artificial Analysis") {
-		t.Errorf("missing AA attribution\n---\n%s", got)
+		t.Errorf("missing ArtificialAnalysis attribution\n---\n%s", got)
 	}
 	// Summary mentions candidate and dropped counts.
 	if !strings.Contains(got, "3 candidates") || !strings.Contains(got, "507") {

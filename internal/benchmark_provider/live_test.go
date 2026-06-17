@@ -2,8 +2,8 @@
 
 // Live shape-contract test for the Artificial Analysis benchmark_provider. Skipped by the
 // default `go test`; run with `make live-test` (= `go test -tags live ./...`).
-// It hits the real AA Data API and asserts the free-tier response still has the
-// shape the data layer assumes. A failure means AA changed its API — update the
+// It hits the real ArtificialAnalysis Data API and asserts the free-tier response still has the
+// shape the data layer assumes. A failure means ArtificialAnalysis changed its API — update the
 // wire types / assumptions. Requires AA_API_KEY in the environment.
 package benchmark_provider_test
 
@@ -27,12 +27,12 @@ func TestLiveAAShape(t *testing.T) {
 
 	models, err := benchmark_provider.NewAA(key).Fetch(ctx, nil)
 	if err != nil {
-		t.Fatalf("live AA fetch failed: %v", err)
+		t.Fatalf("live ArtificialAnalysis fetch failed: %v", err)
 	}
 
 	// Headroom below today's ~500 so routine leaderboard churn doesn't flake.
 	if len(models) < 100 {
-		t.Fatalf("expected >=100 models from live AA, got %d", len(models))
+		t.Fatalf("expected >=100 models from live ArtificialAnalysis, got %d", len(models))
 	}
 
 	var withCoding, withPricing, withCost int
@@ -78,6 +78,6 @@ func TestLiveAAShape(t *testing.T) {
 	if !sawOpenAI || !sawAnthropic {
 		t.Errorf("expected OpenAI and Anthropic anchors; openai=%v anthropic=%v", sawOpenAI, sawAnthropic)
 	}
-	t.Logf("live AA: %d models, %d coding, %d pricing, %d total_cost, max coding=%.1f",
+	t.Logf("live ArtificialAnalysis: %d models, %d coding, %d pricing, %d total_cost, max coding=%.1f",
 		len(models), withCoding, withPricing, withCost, maxCoding)
 }

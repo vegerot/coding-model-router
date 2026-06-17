@@ -66,7 +66,7 @@ func TestBuildFiltersAndComputes(t *testing.T) {
 		t.Errorf("kept wrong candidate: %s", c.Slug)
 	}
 	if c.InputPricePer1M != 0 || c.OutputPricePer1M != 0 || c.BlendedPricePer1M != 0 {
-		t.Errorf("AA prices should not be carried into snapshot: %+v", c)
+		t.Errorf("ArtificialAnalysis prices should not be carried into snapshot: %+v", c)
 	}
 	if c.AgenticIndex != 51 || c.IntelligenceIndex != 52 || c.EvalTotalCostUSD != 400 {
 		t.Errorf("optional fields not carried: %+v", c)

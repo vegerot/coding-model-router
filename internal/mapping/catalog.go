@@ -19,7 +19,7 @@ const (
 )
 
 // Catalog is the cached subset of OpenRouter model-list data needed for
-// deterministic AA slug/name to OpenRouter ID resolution.
+// deterministic ArtificialAnalysis slug/name to OpenRouter ID resolution.
 type Catalog struct {
 	SchemaVersion int               `json:"schemaVersion"`
 	FetchedAt     time.Time         `json:"fetchedAt"`
