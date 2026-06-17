@@ -21,7 +21,7 @@ make build
 ./router select --p 0.7 --json # machine-readable selection plan
 ./router mappings              # resolve cached candidates to OpenRouter model IDs
 ./router mappings --json       # machine-readable mapping diagnostics
-./router select --p 0.7 --mapped-only
+./router select --p 0.7 --show-unmapped-openrouter-models
 ./router serve                 # run the OpenAI-compatible proxy on 127.0.0.1:4000
 ```
 
@@ -36,7 +36,7 @@ curl http://127.0.0.1:4000/v1/chat/completions \
   -d '{"model":"pareto@0.8","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-`router mappings` uses the cached AA snapshot plus a cached OpenRouter model catalog from `GET https://openrouter.ai/api/v1/models`. It does not rely on a checked-in alias table: deterministic matches are derived at runtime, ambiguous matches stay unresolved, and `select --mapped-only` excludes unresolved/ambiguous candidates before routing selection.
+`router mappings` uses the cached AA snapshot plus a cached OpenRouter model catalog from `GET https://openrouter.ai/api/v1/models`. It does not rely on a checked-in alias table: deterministic matches are derived at runtime, ambiguous matches stay unresolved, and `select` excludes unresolved/ambiguous candidates before routing selection unless `--show-unmapped-openrouter-models` is set.
 
 The OpenAI-compatible proxy (`router serve`) is designed in [`DESIGN.md`](./DESIGN.md). M5 (resilience + observability: OpenRouter `models[]` fallback, session stickiness, structured logging) is next.
 

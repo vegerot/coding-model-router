@@ -206,9 +206,10 @@ error.
   `GET https://openrouter.ai/api/v1/models` on demand, and resolves AA
   candidates with deterministic provider/name matching. `router mappings`
   reports mapped/unmapped/ambiguous counts, top unmapped candidates by AA coding
-  quality, and JSON diagnostics. `router select --mapped-only` resolves the
-  snapshot first, drops unresolved/ambiguous candidates, sets `Candidate.OpenRouterID`
-  on mapped candidates, and then calls the same pure M2 engine.
+  quality, and JSON diagnostics. `router select` resolves the snapshot first,
+  drops unresolved/ambiguous candidates unless `--show-unmapped-openrouter-models`
+  is set, sets `Candidate.OpenRouterID` on mapped candidates, and then calls the
+  same pure M2 engine.
 
 ## Future milestones (designed; not yet built)
 

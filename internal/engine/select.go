@@ -37,11 +37,11 @@ func Select(s *snapshot.Snapshot, p float64, _ Options) (Plan, error) {
 	if s == nil {
 		return Plan{}, ErrNilSnapshot
 	}
-	if len(s.Candidates) == 0 {
-		return Plan{}, ErrNoCandidates
-	}
 	if math.IsNaN(p) || math.IsInf(p, 0) || p < 0 || p > 1 {
 		return Plan{}, fmt.Errorf("engine: p must be in [0,1], got %v", p)
+	}
+	if len(s.Candidates) == 0 {
+		return Plan{}, ErrNoCandidates
 	}
 
 	norm := snapshot.NormalizedQuality(s.Candidates)

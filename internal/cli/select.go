@@ -19,13 +19,13 @@ func Select(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("select", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		p              = fs.Float64("p", 0, "quality floor in [0,1]")
-		doRefresh      = fs.Bool("refresh", false, "force a re-fetch even if a cached snapshot exists")
-		asJSON         = fs.Bool("json", false, "emit the selection plan as JSON instead of a table")
-		cachePath      = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		apiKey         = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
-		mappedOnly     = fs.Bool("mapped-only", false, "select only candidates that resolve to OpenRouter model IDs")
-		openRouterPath = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
+		p                            = fs.Float64("p", 0, "quality floor in [0,1]")
+		doRefresh                    = fs.Bool("refresh", false, "force a re-fetch even if a cached snapshot exists")
+		asJSON                       = fs.Bool("json", false, "emit the selection plan as JSON instead of a table")
+		cachePath                    = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
+		apiKey                       = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		showUnmappedOpenRouterModels = fs.Bool("show-unmapped-openrouter-models", false, "include candidates without resolved OpenRouter model IDs")
+		openRouterPath               = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -36,14 +36,13 @@ func Select(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "router: %v\n", err)
 		return 1
 	}
-
 	s, _, code := load(path, *doRefresh, *apiKey, stderr)
 	if s == nil {
 		return code
 	}
 
 	var mappingSummary *mapping.Summary
-	if *mappedOnly {
+	if !*showUnmappedOpenRouterModels {
 		catalogPath, err := resolveOpenRouterCatalogPath(*openRouterPath)
 		if err != nil {
 			fmt.Fprintf(stderr, "router: %v\n", err)

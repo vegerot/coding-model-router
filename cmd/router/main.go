@@ -55,7 +55,8 @@ Usage:
   router snapshot [--refresh] [--json] [--cache PATH]
       Build or display the candidate model snapshot (quality + blended cost).
 
-  router select [--p P] [--refresh] [--json] [--cache PATH] [--mapped-only]
+  router select [--p P] [--refresh] [--json] [--cache PATH]
+                [--show-unmapped-openrouter-models]
       Select the cheapest model at or above quality floor P.
 
   router mappings [--refresh] [--json] [--cache PATH] [--openrouter-cache PATH]

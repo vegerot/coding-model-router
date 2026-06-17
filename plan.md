@@ -90,10 +90,10 @@ M4 and later.
 - [x] **M3 — dynamic OpenRouter mapping.** `internal/mapping` fetches and caches
   OpenRouter's model catalog, resolves AA candidates to OpenRouter IDs with
   deterministic provider/name rules, and keeps ambiguous/unresolved candidates
-  out of mapped-only routing. `router mappings` prints mapped/unmapped/ambiguous
+  out of mapped routing. `router mappings` prints mapped/unmapped/ambiguous
   diagnostics plus top unmapped candidates by AA coding quality; `--json` emits
-  the full report. `router select --mapped-only` filters the snapshot to mapped
-  candidates, sets `Candidate.OpenRouterID`, then calls the same pure M2 engine.
+  the full report. `router select` filters the snapshot to mapped candidates by
+  default, sets `Candidate.OpenRouterID`, then calls the same pure M2 engine.
   The planning experiment found strict deterministic catalog matching resolved
   **141 / 189 candidates (74.6%)**, including all top 20 candidates by AA coding
   quality, while avoiding checked-in alias churn.
@@ -126,8 +126,8 @@ M4 and later.
   cheapest first; re-run without `--refresh` → served from cache, no network;
   `… snapshot --json | python3 -m json.tool` → valid; `… select --p 0.7`
   prints the selected primary and fallbacks from the cached/refreshed snapshot;
-  `… mappings` prints OpenRouter resolution diagnostics; `… select --mapped-only`
-  selects only candidates with resolved OpenRouter IDs;
+  `… mappings` prints OpenRouter resolution diagnostics; `… select`
+  selects only candidates with resolved OpenRouter IDs by default;
   `OPENROUTER_API_KEY=… … serve` then `curl -d '{"model":"pareto@0.8",…}'
   http://127.0.0.1:4000/v1/chat/completions` returns a completion from a real
   OpenRouter model at or above the floor (`pareto@2` → HTTP 400).

@@ -74,7 +74,7 @@ func TestMappingsJSON(t *testing.T) {
 	}
 }
 
-func TestSelectMappedOnly(t *testing.T) {
+func TestSelectDefaultsToMappedOnly(t *testing.T) {
 	t.Setenv("AA_API_KEY", "")
 	snapshotPath := filepath.Join(t.TempDir(), "snapshot.json")
 	catalogPath := filepath.Join(t.TempDir(), "openrouter-models.json")
@@ -85,7 +85,6 @@ func TestSelectMappedOnly(t *testing.T) {
 	code := cli.Select([]string{
 		"--cache", snapshotPath,
 		"--openrouter-cache", catalogPath,
-		"--mapped-only",
 		"--p", "1",
 		"--json",
 	}, &out, &errOut)
@@ -96,7 +95,7 @@ func TestSelectMappedOnly(t *testing.T) {
 		Plan struct {
 			Primary struct {
 				Slug         string `json:"slug"`
-				OpenRouterID string `json:"openrouterId"`
+				OpenRouterID string `json:"openRouterId"`
 			} `json:"primary"`
 		} `json:"plan"`
 		Mappings struct {
@@ -112,6 +111,44 @@ func TestSelectMappedOnly(t *testing.T) {
 	}
 	if decoded.Mappings.Mapped != 2 || decoded.Mappings.Unmapped != 1 {
 		t.Fatalf("mappings summary = %+v", decoded.Mappings)
+	}
+}
+
+func TestSelectShowsUnmappedOpenRouterModels(t *testing.T) {
+	t.Setenv("AA_API_KEY", "")
+	snapshotPath := filepath.Join(t.TempDir(), "snapshot.json")
+	catalogPath := filepath.Join(t.TempDir(), "openrouter-models.json")
+	seedSnapshot(t, snapshotPath)
+	seedCatalog(t, catalogPath)
+
+	var out, errOut bytes.Buffer
+	code := cli.Select([]string{
+		"--cache", snapshotPath,
+		"--openrouter-cache", catalogPath,
+		"--show-unmapped-openrouter-models",
+		"--p", "1",
+		"--json",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, errOut.String())
+	}
+	var decoded struct {
+		Plan struct {
+			Primary struct {
+				Slug         string `json:"slug"`
+				OpenRouterID string `json:"openRouterId"`
+			} `json:"primary"`
+		} `json:"plan"`
+		Mappings *mapping.Summary `json:"mappings"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("--json output is not valid JSON: %v", err)
+	}
+	if decoded.Plan.Primary.Slug != "pricey-top" || decoded.Plan.Primary.OpenRouterID != "" {
+		t.Fatalf("primary = %+v, want unmapped pricey-top", decoded.Plan.Primary)
+	}
+	if decoded.Mappings != nil {
+		t.Fatalf("mappings summary = %+v, want nil when showing unmapped", decoded.Mappings)
 	}
 }
 

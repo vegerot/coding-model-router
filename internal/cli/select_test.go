@@ -16,7 +16,7 @@ func TestSelectPrintsPlanFromCache(t *testing.T) {
 	seedSnapshot(t, path)
 
 	var out, errOut bytes.Buffer
-	code := cli.Select([]string{"--cache", path, "--p", "0.5"}, &out, &errOut)
+	code := cli.Select([]string{"--cache", path, "--p", "0.5", "--show-unmapped-openrouter-models"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, errOut.String())
 	}
@@ -38,7 +38,7 @@ func TestSelectJSON(t *testing.T) {
 	seedSnapshot(t, path)
 
 	var out, errOut bytes.Buffer
-	code := cli.Select([]string{"--cache", path, "--p", "1", "--json"}, &out, &errOut)
+	code := cli.Select([]string{"--cache", path, "--p", "1", "--json", "--show-unmapped-openrouter-models"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, errOut.String())
 	}
