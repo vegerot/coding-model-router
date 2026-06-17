@@ -18,13 +18,13 @@ func Serve(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		addr           = fs.String("addr", "127.0.0.1:4000", "listen address")
-		p              = fs.Float64("p", 0.67, "default quality floor for a bare `pareto` model name")
-		doRefresh      = fs.Bool("refresh", false, "refresh both snapshot and OpenRouter catalog caches")
-		cachePath      = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		artificialAnalysisApyKey         = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
-		openRouterKey  = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
-		openRouterPath = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
+		addr                     = fs.String("addr", "127.0.0.1:4000", "listen address")
+		p                        = fs.Float64("p", 0.67, "default quality floor for a bare `pareto` model name")
+		doRefresh                = fs.Bool("refresh", false, "refresh both snapshot and OpenRouter catalog caches")
+		cachePath                = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
+		artificialAnalysisApyKey = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		openRouterKey            = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
+		openRouterPath           = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 1

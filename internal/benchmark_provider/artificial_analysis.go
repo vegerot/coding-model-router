@@ -50,7 +50,7 @@ func (p *ArtificialAnalysis) Name() string { return AAName }
 // --- wire types: only the free-tier fields we consume ---
 
 type artificialAnalysisResponse struct {
-	Tier       string        `json:"tier"`
+	Tier       string                        `json:"tier"`
 	Pagination artificialAnalysisPagination  `json:"pagination"`
 	Data       []artificialAnalysisModelJSON `json:"data"`
 }

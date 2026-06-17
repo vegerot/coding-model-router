@@ -25,7 +25,11 @@ jobs:
 
       - name: Check formatting
         run: |
-          test -z "$(gofmt -l .)"
+          files="$(gofmt -l .)"
+          if [ -n "$files" ]; then
+            printf 'The following files are not gofmt-formatted:\n%s\n' "$files"
+            exit 1
+          fi
 
       - name: Build
         run: make build

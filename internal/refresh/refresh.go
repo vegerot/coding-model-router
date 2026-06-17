@@ -15,10 +15,10 @@ import (
 // have sensible zero-value defaults.
 type Options struct {
 	Provider  benchmark_provider.BenchmarkProvider // benchmark data source (required)
-	CachePath string            // where the snapshot is persisted (required)
-	Client    *http.Client      // HTTP client; nil → http.DefaultClient
-	Now       func() time.Time  // clock; nil → time.Now
-	Stderr    io.Writer         // warning sink; nil → io.Discard
+	CachePath string                               // where the snapshot is persisted (required)
+	Client    *http.Client                         // HTTP client; nil → http.DefaultClient
+	Now       func() time.Time                     // clock; nil → time.Now
+	Stderr    io.Writer                            // warning sink; nil → io.Discard
 }
 
 // Refresh fetches from the provider, builds and validates a snapshot, and saves
