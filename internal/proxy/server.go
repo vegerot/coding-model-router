@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ const (
 	defaultUpstreamBase = "https://openrouter.ai/api/v1"
 	chatCompletionsPath = "/v1/chat/completions"
 	defaultStickyTTL    = 5 * time.Minute
+	maxFallbackModels   = 3
 )
 
 type Config struct {
@@ -112,6 +114,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		payload["model"] = plan.Primary.OpenRouterID
+
+		if fallbacks := s.fallbackModelIDs(plan); len(fallbacks) > 0 {
+			payload["models"] = fallbacks
+		}
+
 		body, err = json.Marshal(payload)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "re-encode request: "+err.Error())
@@ -150,6 +157,46 @@ func (s *Server) selectPlan(r *http.Request, payload map[string]any, p float64) 
 		s.stickies.set(key, p, plan)
 	}
 	return plan, nil
+}
+
+func (s *Server) fallbackModelIDs(plan engine.Plan) []string {
+	fallbacks := make([]string, 0, maxFallbackModels)
+	seen := map[string]bool{plan.Primary.OpenRouterID: true}
+
+	for _, c := range plan.Fallbacks {
+		if c.OpenRouterID == "" || seen[c.OpenRouterID] {
+			continue
+		}
+		fallbacks = append(fallbacks, c.OpenRouterID)
+		seen[c.OpenRouterID] = true
+		if len(fallbacks) == maxFallbackModels {
+			return fallbacks
+		}
+	}
+
+	extra := make([]snapshot.Candidate, 0, len(s.snapshot.Candidates))
+	for _, c := range s.snapshot.Candidates {
+		if c.OpenRouterID == "" || seen[c.OpenRouterID] {
+			continue
+		}
+		extra = append(extra, c)
+	}
+	sort.SliceStable(extra, func(i, j int) bool {
+		if extra[i].Quality != extra[j].Quality {
+			return extra[i].Quality > extra[j].Quality
+		}
+		if extra[i].BlendedPricePer1M != extra[j].BlendedPricePer1M {
+			return extra[i].BlendedPricePer1M < extra[j].BlendedPricePer1M
+		}
+		return extra[i].Slug < extra[j].Slug
+	})
+	for _, c := range extra {
+		fallbacks = append(fallbacks, c.OpenRouterID)
+		if len(fallbacks) == maxFallbackModels {
+			break
+		}
+	}
+	return fallbacks
 }
 
 func (s *Server) forward(r *http.Request, body []byte) (*http.Response, error) {

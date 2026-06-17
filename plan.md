@@ -151,6 +151,7 @@ M4 and later.
   * `proxy.Config.UpstreamBase` and `Client` are configurable in the API but not exposed as `serve` CLI flags
   * `proxy.Config.Referer` and `Title` are hardcoded — add `--referer` / `--title` flags to `serve`
   * `Plan.Fallbacks` are computed by the engine but never sent to OpenRouter as `models[]` — proxy only forwards with `Primary.OpenRouterID`
+  * some errors like "Rate limit reached" are not logged to stdout.  Make sure to log all abnormal output!
 - great
   * Aider / SWE-bench providers
   * capability

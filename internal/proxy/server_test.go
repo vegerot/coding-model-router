@@ -52,17 +52,33 @@ func mappedSnapshot() *snapshot.Snapshot {
 	}
 }
 
+func mappedSnapshotMany() *snapshot.Snapshot {
+	return &snapshot.Snapshot{
+		SchemaVersion: snapshot.SchemaVersion,
+		Attribution:   snapshot.Attribution,
+		Candidates: []snapshot.Candidate{
+			{Slug: "cheap", OpenRouterID: "test/cheap", Name: "Cheap", Quality: 30, InputPricePer1M: 1, OutputPricePer1M: 1, BlendedPricePer1M: 1, Provider: "test"},
+			{Slug: "mid", OpenRouterID: "test/mid", Name: "Mid", Quality: 50, InputPricePer1M: 2, OutputPricePer1M: 2, BlendedPricePer1M: 2, Provider: "test"},
+			{Slug: "high", OpenRouterID: "test/high", Name: "High", Quality: 70, InputPricePer1M: 3, OutputPricePer1M: 3, BlendedPricePer1M: 3, Provider: "test"},
+			{Slug: "higher", OpenRouterID: "test/higher", Name: "Higher", Quality: 80, InputPricePer1M: 4, OutputPricePer1M: 4, BlendedPricePer1M: 4, Provider: "test"},
+			{Slug: "top", OpenRouterID: "test/top", Name: "Top", Quality: 90, InputPricePer1M: 5, OutputPricePer1M: 5, BlendedPricePer1M: 5, Provider: "test"},
+		},
+	}
+}
+
 type capture struct {
 	calls        int
 	model        string
 	auth         string
 	head         string
 	usageInclude bool
+	models       []string
 }
 
 type upstreamPayload struct {
-	Model string `json:"model"`
-	Usage struct {
+	Model  string   `json:"model"`
+	Models []string `json:"models"`
+	Usage  struct {
 		Include bool `json:"include"`
 	} `json:"usage"`
 }
@@ -80,6 +96,7 @@ func fakeUpstream(t *testing.T, cap *capture, respond func(w http.ResponseWriter
 		var m upstreamPayload
 		_ = json.Unmarshal(body, &m)
 		cap.model = m.Model
+		cap.models = m.Models
 		cap.usageInclude = m.Usage.Include
 		respond(w, r)
 	}))
@@ -140,6 +157,81 @@ func TestServeRoutesAndRewritesModel(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "test/top") {
 		t.Errorf("response body not relayed: %s", body)
+	}
+}
+
+func TestServeIncludsModelsFallbackArray(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"x","model":"test/cheap"}`)
+	})
+	defer up.Close()
+	px := newProxy(t, mappedSnapshot(), up.URL)
+	defer px.Close()
+
+	resp := post(t, px.URL, `{"model":"pareto@0.0","messages":[]}`, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if cap.model != "test/cheap" {
+		t.Errorf("upstream model = %q, want test/cheap", cap.model)
+	}
+	if len(cap.models) != 2 || cap.models[0] != "test/mid" || cap.models[1] != "test/top" {
+		t.Errorf("upstream models fallback array = %v, want [test/mid test/top]", cap.models)
+	}
+}
+
+func TestServeAddsFallbacksForP1FromLowerQualityModels(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"x","model":"test/top"}`)
+	})
+	defer up.Close()
+	px := newProxy(t, mappedSnapshot(), up.URL)
+	defer px.Close()
+
+	resp := post(t, px.URL, `{"model":"pareto@1.0","messages":[]}`, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if cap.model != "test/top" {
+		t.Fatalf("upstream model = %q, want test/top", cap.model)
+	}
+	if len(cap.models) != 2 || cap.models[0] != "test/mid" || cap.models[1] != "test/cheap" {
+		t.Fatalf("upstream models fallback array = %v, want [test/mid test/cheap]", cap.models)
+	}
+}
+
+func TestServeLimitsModelsFallbackArrayToThree(t *testing.T) {
+	var cap capture
+	up := fakeUpstream(t, &cap, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"x","model":"test/cheap"}`)
+	})
+	defer up.Close()
+	px := newProxy(t, mappedSnapshotMany(), up.URL)
+	defer px.Close()
+
+	resp := post(t, px.URL, `{"model":"pareto@0.0","messages":[]}`, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if len(cap.models) != 3 {
+		t.Fatalf("len(models) = %d, want 3 (%v)", len(cap.models), cap.models)
+	}
+	want := []string{"test/mid", "test/high", "test/higher"}
+	for i := range want {
+		if cap.models[i] != want[i] {
+			t.Fatalf("models[%d] = %q, want %q (all: %v)", i, cap.models[i], want[i], cap.models)
+		}
 	}
 }
 
