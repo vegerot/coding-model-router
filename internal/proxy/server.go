@@ -235,10 +235,37 @@ type logEntry struct {
 	P            float64       `json:"p"`
 	Model        string        `json:"model,omitempty"`
 	Provider     string        `json:"provider,omitempty"`
-	FallbackHops int           `json:"fallback_hops"`
-	Status       int           `json:"status"`
-	Attempts     []attemptInfo `json:"attempts,omitempty"`
+	FallbackHops int           `json:"-"`
+	Status       int           `json:"-"`
+	Attempts     []attemptInfo `json:"-"`
 	Output       string        `json:"output,omitempty"`
+}
+
+func (e logEntry) MarshalJSON() ([]byte, error) {
+	m := map[string]any{}
+	if e.SessionID != "" {
+		m["session_id"] = e.SessionID
+	}
+	m["p"] = e.P
+	if e.Model != "" {
+		m["model"] = e.Model
+	}
+	if e.Provider != "" {
+		m["provider"] = e.Provider
+	}
+	if e.FallbackHops != 0 {
+		m["fallback_hops"] = e.FallbackHops
+	}
+	if e.Status != 0 && e.Status != 200 {
+		m["status"] = e.Status
+	}
+	if len(e.Attempts) > 1 {
+		m["attempts"] = e.Attempts
+	}
+	if e.Output != "" {
+		m["output"] = e.Output
+	}
+	return json.Marshal(m)
 }
 
 type attemptInfo struct {
