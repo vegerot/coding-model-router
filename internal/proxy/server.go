@@ -146,7 +146,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	streamBody(w, io.TeeReader(resp.Body, sniff))
 
 	if s.logger != nil {
-		s.logRequest(s.logger, r, decision.P, model, plan, sentFallbacks, resp.StatusCode, sniff.errorBody(), sniff.servedModel())
+		s.logRequest(s.logger, r, decision.P, model, plan, sentFallbacks, resp.StatusCode, sniff.errorBody(), sniff.servedModel(), int64(len(body)), sniff.totalBytes())
 	}
 }
 
@@ -239,6 +239,8 @@ type logEntry struct {
 	Status       int           `json:"-"`
 	Attempts     []attemptInfo `json:"-"`
 	Output       string        `json:"output,omitempty"`
+	InputBytes   int64         `json:"-"`
+	OutputBytes  int64         `json:"-"`
 }
 
 func (e logEntry) MarshalJSON() ([]byte, error) {
@@ -265,6 +267,12 @@ func (e logEntry) MarshalJSON() ([]byte, error) {
 	if e.Output != "" {
 		m["output"] = e.Output
 	}
+	if e.InputBytes != 0 {
+		m["input_kB"] = e.InputBytes / 1024
+	}
+	if e.OutputBytes != 0 {
+		m["output_kB"] = e.OutputBytes / 1024
+	}
 	return json.Marshal(m)
 }
 
@@ -273,7 +281,7 @@ type attemptInfo struct {
 	Status int    `json:"status"`
 }
 
-func (s *Server) logRequest(w io.Writer, r *http.Request, p float64, requestModel string, plan engine.Plan, sentFallbacks []string, status int, respBody []byte, servedModel string) {
+func (s *Server) logRequest(w io.Writer, r *http.Request, p float64, requestModel string, plan engine.Plan, sentFallbacks []string, status int, respBody []byte, servedModel string, inputBytes, outputBytes int64) {
 	model := requestModel
 	provider := ""
 	fallbackHops := 0
@@ -312,6 +320,8 @@ func (s *Server) logRequest(w io.Writer, r *http.Request, p float64, requestMode
 		FallbackHops: fallbackHops,
 		Status:       status,
 		Attempts:     attempts,
+		InputBytes:   inputBytes,
+		OutputBytes:  outputBytes,
 	}
 
 	if status < 200 || status > 299 {
@@ -366,9 +376,11 @@ type servedModelSniffer struct {
 	full         bytes.Buffer
 	found        string
 	done         bool
+	respBytes    int64
 }
 
 func (s *servedModelSniffer) Write(p []byte) (int, error) {
+	s.respBytes += int64(len(p))
 	if s.logErrorBody {
 		s.full.Write(p)
 	}
@@ -391,6 +403,8 @@ func (s *servedModelSniffer) Write(p []byte) (int, error) {
 }
 
 func (s *servedModelSniffer) servedModel() string { return s.found }
+
+func (s *servedModelSniffer) totalBytes() int64 { return s.respBytes }
 
 func (s *servedModelSniffer) errorBody() []byte {
 	if !s.logErrorBody {
