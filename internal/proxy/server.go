@@ -217,7 +217,7 @@ func (s *Server) forward(r *http.Request, body []byte) (*http.Response, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if auth := r.Header.Get("Authorization"); auth != "" {
+	if auth := r.Header.Get("Authorization"); auth != "" && auth != "Bearer N/A" {
 		req.Header.Set("Authorization", auth)
 	} else if s.openRouterKey != "" {
 		req.Header.Set("Authorization", "Bearer "+s.openRouterKey)
