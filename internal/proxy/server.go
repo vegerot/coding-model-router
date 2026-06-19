@@ -75,6 +75,10 @@ func NewServer(cfg Config) (*Server, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/v1/models" && r.Method == http.MethodGet {
+		s.serveModels(w, r)
+		return
+	}
 	if r.URL.Path != chatCompletionsPath || r.Method != http.MethodPost {
 		writeError(w, http.StatusNotFound, "not found: only POST "+chatCompletionsPath+" is served")
 		return
@@ -554,4 +558,31 @@ func conversationFingerprint(payload map[string]any) string {
 	}
 	h := sha256.Sum256([]byte(systemMsg + "\x00" + userMsg))
 	return hex.EncodeToString(h[:])
+}
+
+func (s *Server) serveModels(w http.ResponseWriter, r *http.Request) {
+	type Model struct {
+		ID      string `json:"id"`
+		Object  string `json:"object"`
+		Created int64  `json:"created"`
+		OwnedBy string `json:"owned_by"`
+	}
+	type Response struct {
+		Object string  `json:"object"`
+		Data   []Model `json:"data"`
+	}
+
+	res := Response{
+		Object: "list",
+		Data: []Model{
+			{ID: "pareto@0", Object: "model", Created: time.Now().Unix(), OwnedBy: "system"},
+			{ID: "pareto@0.5", Object: "model", Created: time.Now().Unix(), OwnedBy: "system"},
+			{ID: "pareto@1", Object: "model", Created: time.Now().Unix(), OwnedBy: "system"},
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode models: "+err.Error())
+	}
 }

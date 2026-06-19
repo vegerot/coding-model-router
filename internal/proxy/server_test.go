@@ -597,3 +597,50 @@ func TestServerLogsPassthroughModel(t *testing.T) {
 		t.Fatalf("log has synthetic attempts for passthrough request: %s", log.String())
 	}
 }
+
+func TestServeModels(t *testing.T) {
+	srv, err := proxy.NewServer(proxy.Config{
+		Snapshot: &snapshot.Snapshot{Candidates: []snapshot.Candidate{
+			{OpenRouterID: "test/model", Quality: 50, BlendedPricePer1M: 10, Slug: "test-model"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/v1/models", nil)
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var res struct {
+		Object string `json:"object"`
+		Data   []struct {
+			ID     string `json:"id"`
+			Object string `json:"object"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+
+	if res.Object != "list" {
+		t.Errorf("object = %q, want list", res.Object)
+	}
+	if len(res.Data) != 3 {
+		t.Fatalf("len(data) = %d, want 3", len(res.Data))
+	}
+
+	wantIDs := []string{"pareto@0", "pareto@0.5", "pareto@1"}
+	for i, want := range wantIDs {
+		if res.Data[i].ID != want {
+			t.Errorf("data[%d].id = %q, want %q", i, res.Data[i].ID, want)
+		}
+		if res.Data[i].Object != "model" {
+			t.Errorf("data[%d].object = %q, want model", i, res.Data[i].Object)
+		}
+	}
+}
