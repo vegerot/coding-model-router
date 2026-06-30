@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -181,29 +180,6 @@ func (s *Server) fallbackModelIDs(plan engine.Plan) []string {
 		}
 		fallbacks = append(fallbacks, c.OpenRouterID)
 		seen[c.OpenRouterID] = true
-		if len(fallbacks) == maxFallbackModels {
-			return fallbacks
-		}
-	}
-
-	extra := make([]snapshot.Candidate, 0, len(s.snapshot.Candidates))
-	for _, c := range s.snapshot.Candidates {
-		if c.OpenRouterID == "" || seen[c.OpenRouterID] {
-			continue
-		}
-		extra = append(extra, c)
-	}
-	sort.SliceStable(extra, func(i, j int) bool {
-		if extra[i].Quality != extra[j].Quality {
-			return extra[i].Quality > extra[j].Quality
-		}
-		if extra[i].BlendedPricePer1M != extra[j].BlendedPricePer1M {
-			return extra[i].BlendedPricePer1M < extra[j].BlendedPricePer1M
-		}
-		return extra[i].Slug < extra[j].Slug
-	})
-	for _, c := range extra {
-		fallbacks = append(fallbacks, c.OpenRouterID)
 		if len(fallbacks) == maxFallbackModels {
 			break
 		}

@@ -22,16 +22,13 @@ func TestSelectPrintsPlanFromCache(t *testing.T) {
 	}
 
 	got := out.String()
-	for _, want := range []string{"ROLE", "primary", "mid", "fallback-1", "pricey-top", "Artificial Analysis"} {
+	for _, want := range []string{"ROLE", "primary", "mid", "fallback-1", "pricey-top", "fallback-2", "cheap-low", "Artificial Analysis"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("select output missing %q\n---\n%s", want, got)
 		}
 	}
 	if strings.Contains(got, "BLENDED$/1M") {
 		t.Errorf("unmapped select output should not show pricing\n---\n%s", got)
-	}
-	if strings.Contains(got, "cheap-low") {
-		t.Errorf("cheap-low should not qualify at p=0.5\n---\n%s", got)
 	}
 }
 
@@ -64,8 +61,14 @@ func TestSelectJSON(t *testing.T) {
 	if decoded.Plan.P != 1 || decoded.Plan.Primary.Slug != "pricey-top" {
 		t.Errorf("decoded plan wrong: %+v", decoded.Plan)
 	}
-	if len(decoded.Plan.Fallbacks) != 0 {
-		t.Errorf("p=1 should have no fallbacks in sample snapshot, got %+v", decoded.Plan.Fallbacks)
+	if len(decoded.Plan.Fallbacks) != 2 {
+		t.Fatalf("p=1 fallback count = %d, want 2 (%+v)", len(decoded.Plan.Fallbacks), decoded.Plan.Fallbacks)
+	}
+	wantFallbacks := []string{"mid", "cheap-low"}
+	for i, want := range wantFallbacks {
+		if decoded.Plan.Fallbacks[i].Slug != want {
+			t.Errorf("fallback %d = %q, want %q", i, decoded.Plan.Fallbacks[i].Slug, want)
+		}
 	}
 	if !strings.Contains(decoded.Attribution, "Artificial Analysis") {
 		t.Errorf("missing attribution in JSON: %q", decoded.Attribution)

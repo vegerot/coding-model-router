@@ -78,7 +78,36 @@ func TestSelectReturnsOrderedFallbacks(t *testing.T) {
 	for i, c := range plan.Fallbacks {
 		got[i] = c.Slug
 	}
-	want := []string{"mid", "expensive"}
+	want := []string{"mid", "expensive", "cheap-low"}
+	if len(got) != len(want) {
+		t.Fatalf("fallback count = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("fallback %d = %q, want %q (all: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestSelectAddsLowerQualityRescueFallbacks(t *testing.T) {
+	s := snap(
+		cand("cheap", 30, 1),
+		cand("mid", 50, 2),
+		cand("top", 90, 3),
+	)
+
+	plan, err := engine.Select(s, 1, engine.Options{})
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+	if plan.Primary.Slug != "top" {
+		t.Fatalf("primary = %q, want top", plan.Primary.Slug)
+	}
+	got := make([]string, len(plan.Fallbacks))
+	for i, c := range plan.Fallbacks {
+		got[i] = c.Slug
+	}
+	want := []string{"mid", "cheap"}
 	if len(got) != len(want) {
 		t.Fatalf("fallback count = %d, want %d (%v)", len(got), len(want), got)
 	}
