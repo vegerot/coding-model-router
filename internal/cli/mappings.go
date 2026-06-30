@@ -21,6 +21,7 @@ func Mappings(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var (
 		asJSON                   = fs.Bool("json", false, "emit mapping diagnostics as JSON instead of a table")
+		refresh                  = fs.Bool("refresh", false, "refresh the snapshot and OpenRouter catalog from live APIs")
 		cachePath                = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
 		artificialAnalysisApiKey = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		openRouterPath           = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
@@ -29,7 +30,7 @@ func Mappings(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	s, report, code := loadMappingReport(*cachePath, *openRouterPath, false, *artificialAnalysisApiKey, stderr)
+	s, report, code := loadMappingReport(*cachePath, *openRouterPath, *refresh, *artificialAnalysisApiKey, stderr)
 	if s == nil {
 		return code
 	}

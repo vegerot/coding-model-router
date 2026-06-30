@@ -21,6 +21,7 @@ func Select(args []string, stdout, stderr io.Writer) int {
 	var (
 		p                            = fs.Float64("p", 0, "quality floor in [0,1]")
 		asJSON                       = fs.Bool("json", false, "emit the selection plan as JSON instead of a table")
+		refresh                      = fs.Bool("refresh", false, "refresh the snapshot and OpenRouter catalog from live APIs")
 		cachePath                    = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
 		artificialAnalysisApiKey     = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		showUnmappedOpenRouterModels = fs.Bool("show-unmapped-openrouter-models", false, "include candidates without resolved OpenRouter model IDs")
@@ -41,13 +42,13 @@ func Select(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "router: %v\n", err)
 			return 1
 		}
-		s, code = load(path, false, *artificialAnalysisApiKey, stderr)
+		s, code = load(path, *refresh, *artificialAnalysisApiKey, stderr)
 		if s == nil {
 			return code
 		}
 	} else {
 		var report mapping.Report
-		s, report, code = loadMappedSnapshot(*cachePath, *openRouterPath, false, *artificialAnalysisApiKey, stderr)
+		s, report, code = loadMappedSnapshot(*cachePath, *openRouterPath, *refresh, *artificialAnalysisApiKey, stderr)
 		if s == nil {
 			return code
 		}
