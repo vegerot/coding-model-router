@@ -179,6 +179,25 @@ func TestResolveUsesProviderSuppliedOpenRouterID(t *testing.T) {
 	}
 }
 
+func TestResolvePrefersNonFreeVariant(t *testing.T) {
+	s := snap(candidate("nex-n2-pro", "Nex N2 Pro", "NexAGI", 59, 0))
+	catalog := catalog(
+		modelWithPricing("nex-agi/nex-n2-pro", "Nex N2 Pro", "0.0000005", "0.000001", ""),
+		modelWithPricing("nex-agi/nex-n2-pro:free", "Nex N2 Pro (free)", "0", "0", ""),
+	)
+
+	report, err := mapping.Resolve(s, catalog)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if report.Results[0].Status != mapping.StatusMapped {
+		t.Fatalf("status = %s, want mapped", report.Results[0].Status)
+	}
+	if got := report.Results[0].OpenRouterID; got != "nex-agi/nex-n2-pro" {
+		t.Errorf("OpenRouterID = %q, want nex-agi/nex-n2-pro (non-free)", got)
+	}
+}
+
 func TestResolveRejectsNilInputs(t *testing.T) {
 	if _, err := mapping.Resolve(nil, catalog()); !errors.Is(err, mapping.ErrNilSnapshot) {
 		t.Fatalf("nil snapshot err = %v", err)

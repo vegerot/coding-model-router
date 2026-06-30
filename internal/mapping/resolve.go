@@ -182,6 +182,19 @@ func resolveCandidate(c snapshot.Candidate, models []OpenRouterModel) Result {
 	}
 	sort.Slice(matches, func(i, j int) bool { return matches[i].ID < matches[j].ID })
 
+	// Prefer non-free variants when multiple matches exist
+	if len(matches) > 1 {
+		nonFree := make([]OpenRouterModel, 0, len(matches))
+		for _, m := range matches {
+			if !strings.HasSuffix(m.ID, ":free") {
+				nonFree = append(nonFree, m)
+			}
+		}
+		if len(nonFree) > 0 {
+			matches = nonFree
+		}
+	}
+
 	result := Result{Candidate: c}
 	switch len(matches) {
 	case 0:
