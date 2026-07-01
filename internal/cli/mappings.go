@@ -137,7 +137,8 @@ func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, benchma
 	if s == nil {
 		return nil, mapping.Report{}, code
 	}
-	if s.Sources.Provider == benchmark_provider.OpenRouterBenchmarksName {
+	switch s.Sources.Provider {
+	case benchmark_provider.OpenRouterBenchmarksName:
 		report := mapping.Report{
 			SnapshotFetchedAt: s.FetchedAt,
 			CatalogSource:     benchmark_provider.OpenRouterBenchmarksName,
@@ -158,23 +159,28 @@ func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, benchma
 			})
 		}
 		return s, report, code
-	}
-	catalogPath, err := resolveOpenRouterCatalogPath(openRouterPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "router: %v\n", err)
+
+	case benchmark_provider.AAName:
+		catalogPath, err := resolveOpenRouterCatalogPath(openRouterPath)
+		if err != nil {
+			fmt.Fprintf(stderr, "router: %v\n", err)
+			return nil, mapping.Report{}, 1
+		}
+		catalog, catalogCode := loadOpenRouterCatalog(catalogPath, doRefresh, stderr)
+		if catalog == nil {
+			return nil, mapping.Report{}, catalogCode
+		}
+		code = combineCodes(code, catalogCode)
+		report, err := mapping.Resolve(s, catalog)
+		if err != nil {
+			fmt.Fprintf(stderr, "router: %v\n", err)
+			return nil, mapping.Report{}, 1
+		}
+		return s, report, code
+	default:
+		fmt.Fprintf(stderr, "router: unknown benchmark provider %q\n", s.Sources.Provider)
 		return nil, mapping.Report{}, 1
 	}
-	catalog, catalogCode := loadOpenRouterCatalog(catalogPath, doRefresh, stderr)
-	if catalog == nil {
-		return nil, mapping.Report{}, catalogCode
-	}
-	code = combineCodes(code, catalogCode)
-	report, err := mapping.Resolve(s, catalog)
-	if err != nil {
-		fmt.Fprintf(stderr, "router: %v\n", err)
-		return nil, mapping.Report{}, 1
-	}
-	return s, report, code
 }
 
 func resolveOpenRouterCatalogPath(path string) (string, error) {

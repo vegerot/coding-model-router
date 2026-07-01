@@ -46,6 +46,6 @@ type Model struct {
 
 	// OpenRouterID is the OpenRouter model id when the provider supplies one
 	// (e.g. ArtificialAnalysis's Pro-tier openrouter_api_id); "" otherwise. Needed only for
-	// routing (M3), not for the snapshot.
+	// routing, not for the snapshot.
 	OpenRouterID string
 }

@@ -34,7 +34,7 @@ type Snapshot struct {
 // SourceMeta records which benchmark provider produced this snapshot and how
 // many raw models it returned before filtering to candidates.
 type SourceMeta struct {
-	Provider   string `json:"provider"`   // e.g. "artificial-analysis"
+	Provider   string `json:"provider"`   // either "artificial-analysis" or "openrouter"
 	ModelCount int    `json:"modelCount"` // raw models from the provider, before filtering
 }
 
