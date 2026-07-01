@@ -24,7 +24,7 @@ func Mappings(args []string, stdout, stderr io.Writer) int {
 		asJSON                   = fs.Bool("json", false, "emit mapping diagnostics as JSON instead of a table")
 		refresh                  = fs.Bool("refresh", false, "refresh the snapshot and any required OpenRouter catalog from live APIs")
 		cachePath                = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		benchmarkProvider        = fs.String("benchmark-provider", benchmark_provider.AAName, "benchmark provider: aa or openrouter")
+		benchmarkProvider        = fs.String("benchmark-provider", defaultBenchmarkProvider, "benchmark provider: aa or openrouter")
 		artificialAnalysisApiKey = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		openRouterAPIKey         = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
 		openRouterPath           = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")

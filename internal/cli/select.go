@@ -23,7 +23,7 @@ func Select(args []string, stdout, stderr io.Writer) int {
 		asJSON                       = fs.Bool("json", false, "emit the selection plan as JSON instead of a table")
 		refresh                      = fs.Bool("refresh", false, "refresh the snapshot and any required OpenRouter catalog from live APIs")
 		cachePath                    = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		benchmarkProvider            = fs.String("benchmark-provider", "aa", "benchmark provider: aa or openrouter")
+		benchmarkProvider            = fs.String("benchmark-provider", defaultBenchmarkProvider, "benchmark provider: aa or openrouter")
 		artificialAnalysisApiKey     = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		openRouterAPIKey             = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
 		showUnmappedOpenRouterModels = fs.Bool("show-unmapped-openrouter-models", false, "include candidates without resolved OpenRouter model IDs")

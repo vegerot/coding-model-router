@@ -35,7 +35,7 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 		doRefresh                = fs.Bool("refresh", false, "force a re-fetch even if a cached snapshot exists")
 		asJSON                   = fs.Bool("json", false, "emit the raw snapshot JSON instead of a table")
 		cachePath                = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		benchmarkProvider        = fs.String("benchmark-provider", benchmark_provider.AAName, "benchmark provider: aa or openrouter")
+		benchmarkProvider        = fs.String("benchmark-provider", defaultBenchmarkProvider, "benchmark provider: aa or openrouter")
 		artificialAnalysisApiKey = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		openRouterAPIKey         = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
 	)

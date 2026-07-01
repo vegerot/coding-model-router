@@ -75,6 +75,6 @@ Usage:
   router help
       Show this help.
 
-Default data: Artificial Analysis (https://artificialanalysis.ai). Optional data: OpenRouter benchmarks.
+Default data: OpenRouter benchmarks. Optional data: direct Artificial Analysis.
 	`)
 }

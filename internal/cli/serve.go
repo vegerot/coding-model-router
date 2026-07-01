@@ -22,7 +22,7 @@ func Serve(args []string, stdout, stderr io.Writer) int {
 		p                        = fs.Float64("p", 0.67, "default quality floor for a bare `pareto` model name")
 		doRefresh                = fs.Bool("refresh", false, "refresh the snapshot and any required OpenRouter catalog cache")
 		cachePath                = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		benchmarkProvider        = fs.String("benchmark-provider", "aa", "benchmark provider: aa or openrouter")
+		benchmarkProvider        = fs.String("benchmark-provider", defaultBenchmarkProvider, "benchmark provider: aa or openrouter")
 		artificialAnalysisAPIKey = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		openRouterKey            = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
 		openRouterPath           = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")

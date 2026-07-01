@@ -40,11 +40,11 @@ three coarse quality tiers. This project improves on it three ways:
   accepts the knob via model name (`pareto@0.7`) and/or header, rewrites the
   model field, forwards to OpenRouter with SSE streaming passthrough.
 - **Stack — Go.** Single static binary, long-running local daemon, stdlib only.
-- **Data sources — selectable benchmark providers.** The default provider remains
-  Artificial Analysis Data API for continuity. OpenRouter's benchmark API is also
-  supported via `--benchmark-provider openrouter`; it republishes Artificial
-  Analysis coding/agentic/intelligence indices with routable OpenRouter model IDs
-  and OpenRouter pricing. Snapshots use exactly one provider at a time; mixed
+- **Data sources — selectable benchmark providers.** The default provider is
+  OpenRouter's benchmark API; it republishes Artificial Analysis
+  coding/agentic/intelligence indices with routable OpenRouter model IDs and
+  OpenRouter pricing. Direct Artificial Analysis remains supported via
+  `--benchmark-provider aa`. Snapshots use exactly one provider at a time; mixed
   provider snapshots are intentionally out of scope so `p` semantics stay stable.
 - **Quality metric — `artificial_analysis_coding_index`** (model-level coding
   score, 0–100). We route to a *raw* model, so the model-level coding index is
@@ -76,7 +76,7 @@ client (aider / Claude Code / curl)
 │   transport-level retry; Retry-After honored │
 │ data refresher (background, daily):          │
 │   • BenchmarkProvider.Fetch() → []Model      │
-│     (default: Artificial Analysis; optional OpenRouter benchmarks) │
+│     (default: OpenRouter benchmarks; optional Artificial Analysis) │
 │   • disk-cached snapshot; stale data is OK   │
 └──────────────┬───────────────────────────────┘
                ▼ forwards with rewritten model
@@ -88,7 +88,7 @@ client (aider / Claude Code / curl)
 ```
 cmd/router/            CLI: subcommand dispatch + `snapshot` (M1), `select` (M2), `mappings` (M3)
 internal/benchmark_provider/     BenchmarkProvider interface + provider-agnostic Model record
-internal/benchmark_provider/     Artificial Analysis provider (default) + OpenRouter benchmark provider
+internal/benchmark_provider/     OpenRouter benchmark provider (default) + Artificial Analysis provider
 internal/snapshot/     Snapshot/Candidate types, NormalizedQuality + CostScores, store
 internal/refresh/      pure Build (Model→Snapshot), validation, Refresh orchestrator
 internal/engine/       (M2) pure Select(snapshot, p, opts) → routing plan

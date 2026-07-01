@@ -108,8 +108,9 @@ func TestSnapshotJSON(t *testing.T) {
 	}
 }
 
-func TestSnapshotNoCacheNoKeyExits1(t *testing.T) {
+func TestSnapshotNoCacheNoOpenRouterKeyExits1ByDefault(t *testing.T) {
 	t.Setenv("AA_API_KEY", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
 	path := filepath.Join(t.TempDir(), "absent.json")
 
 	var out, errOut bytes.Buffer
@@ -117,8 +118,23 @@ func TestSnapshotNoCacheNoKeyExits1(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (no cache + no key)", code)
 	}
-	if errOut.Len() == 0 {
-		t.Error("expected an error message on stderr")
+	if !strings.Contains(errOut.String(), "OPENROUTER_API_KEY") {
+		t.Fatalf("stderr = %q, want OpenRouter key guidance", errOut.String())
+	}
+}
+
+func TestSnapshotAAProviderNoCacheNoAAKeyExits1(t *testing.T) {
+	t.Setenv("AA_API_KEY", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
+	path := filepath.Join(t.TempDir(), "absent.json")
+
+	var out, errOut bytes.Buffer
+	code := cli.Snapshot([]string{"--benchmark-provider", "aa", "--cache", path}, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (no cache + no AA key)", code)
+	}
+	if !strings.Contains(errOut.String(), "AA_API_KEY") {
+		t.Fatalf("stderr = %q, want AA key guidance", errOut.String())
 	}
 }
 

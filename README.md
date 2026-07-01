@@ -5,7 +5,7 @@ A Pareto-style coding-model router with a **single continuous quality knob** `p 
 Instead of OpenRouter's `pareto-code` (a curated shortlist + three coarse quality tiers), this router:
 
 1. **Continuous knob, not tiers.** `p` is a quality floor; the router picks the **cheapest model at or above the floor**. `p=0` → cheapest model overall; `p=1` → the top-ranked model regardless of cost. Every choice is automatically Pareto-optimal.
-2. **Selectable benchmark source.** The default candidate set still comes from Artificial Analysis's model-level coding index; OpenRouter's benchmark endpoint can be used instead with `--benchmark-provider openrouter`.
+2. **Selectable benchmark source.** The default candidate set comes from OpenRouter's benchmark endpoint, which republishes Artificial Analysis coding scores with routable OpenRouter model IDs; direct Artificial Analysis remains available with `--benchmark-provider aa`.
 3. **Honest V1 cost.** Each model's cost axis is a blended OpenRouter-compatible price: `(3*input + output)/4` per 1M tokens.
 
 ## Status
@@ -15,7 +15,7 @@ Under construction. **M0–M4 are complete**: the data layer builds a validated 
 ```sh
 make build
 ./router snapshot --refresh    # fetch live data, build + cache the snapshot, print the table
-./router snapshot --refresh --benchmark-provider openrouter
+./router snapshot --refresh --benchmark-provider aa
 ./router snapshot              # print from cache (no network)
 ./router snapshot --json       # machine-readable snapshot
 ./router select --p 0.7        # choose the cheapest model at or above p=0.7
@@ -37,7 +37,7 @@ curl http://127.0.0.1:4000/v1/chat/completions \
   -d '{"model":"pareto@0.8","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-`router snapshot` defaults to the direct Artificial Analysis provider (`AA_API_KEY` or `--aa-api-key`). Use `--benchmark-provider openrouter` to build the snapshot from OpenRouter's benchmark API instead (`OPENROUTER_API_KEY` or `--openrouter-api-key`). OpenRouter benchmark snapshots already include routable model IDs and pricing, so `select` and `serve` skip AA→OpenRouter catalog mapping for those snapshots.
+`router snapshot` defaults to OpenRouter's benchmark API (`OPENROUTER_API_KEY` or `--openrouter-api-key`). Use `--benchmark-provider aa` to build the snapshot from the direct Artificial Analysis provider instead (`AA_API_KEY` or `--aa-api-key`). A valid cached snapshot is still used as-is unless `--refresh` is passed. OpenRouter benchmark snapshots already include routable model IDs and pricing, so `select` and `serve` skip AA→OpenRouter catalog mapping for those snapshots.
 
 `router mappings` uses the cached AA snapshot plus a cached OpenRouter model catalog from `GET https://openrouter.ai/api/v1/models`. It does not rely on a checked-in alias table: deterministic matches are derived at runtime, ambiguous matches stay unresolved, and `select` excludes unresolved/ambiguous candidates before routing selection unless `--show-unmapped-openrouter-models` is set. For OpenRouter benchmark snapshots, `mappings` reports candidates as already mapped.
 
@@ -56,6 +56,6 @@ Requires Go 1.26+. No third-party dependencies.
 
 ## Attribution
 
-- **Default quality data:** [Artificial Analysis](https://artificialanalysis.ai). Used under their terms; attribution required wherever this data is displayed.
-- **OpenRouter benchmark mode:** Artificial Analysis quality data via OpenRouter benchmarks, with OpenRouter model IDs and pricing.
+- **Default quality data:** Artificial Analysis quality data via OpenRouter benchmarks, with OpenRouter model IDs and pricing.
+- **Direct AA mode:** [Artificial Analysis](https://artificialanalysis.ai). Used under their terms; attribution required wherever this data is displayed.
 - **Model catalog data for AA mode:** OpenRouter `/api/v1/models`.
