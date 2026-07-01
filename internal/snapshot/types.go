@@ -7,7 +7,7 @@ import "time"
 
 // SchemaVersion is bumped whenever the on-disk Snapshot shape changes
 // incompatibly. Load refuses to read a snapshot with a different version.
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // Attribution is displayed wherever snapshot data is shown. Artificial Analysis
 // requires attribution for use of their benchmark data, across all API tiers.

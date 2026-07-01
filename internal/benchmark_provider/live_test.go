@@ -35,7 +35,7 @@ func TestLiveAAShape(t *testing.T) {
 		t.Fatalf("expected >=100 models from live ArtificialAnalysis, got %d", len(models))
 	}
 
-	var withCoding, withPricing, withCost int
+	var withCoding, withCost int
 	var maxCoding float64
 	var sawOpenAI, sawAnthropic bool
 	for _, m := range models {
@@ -52,9 +52,6 @@ func TestLiveAAShape(t *testing.T) {
 				t.Errorf("coding index for %s out of 0–100 band: %v", m.Slug, *m.CodingIndex)
 			}
 		}
-		if m.InputPricePer1M != nil && m.OutputPricePer1M != nil {
-			withPricing++
-		}
 		if m.EvalTotalCostUSD != nil {
 			withCost++
 		}
@@ -69,8 +66,8 @@ func TestLiveAAShape(t *testing.T) {
 	if withCoding < 50 {
 		t.Errorf("only %d/%d models had a coding index (expected >=50)", withCoding, len(models))
 	}
-	if withPricing < 50 {
-		t.Errorf("only %d/%d models had input+output pricing (expected >=50)", withPricing, len(models))
+	if withCost < 50 {
+		t.Errorf("only %d/%d models had eval total cost (expected >=50)", withCost, len(models))
 	}
 	if maxCoding < 20 {
 		t.Errorf("max coding index %.1f < 20 — possible scale/units change", maxCoding)
@@ -78,6 +75,6 @@ func TestLiveAAShape(t *testing.T) {
 	if !sawOpenAI || !sawAnthropic {
 		t.Errorf("expected OpenAI and Anthropic anchors; openai=%v anthropic=%v", sawOpenAI, sawAnthropic)
 	}
-	t.Logf("live ArtificialAnalysis: %d models, %d coding, %d pricing, %d total_cost, max coding=%.1f",
-		len(models), withCoding, withPricing, withCost, maxCoding)
+	t.Logf("live ArtificialAnalysis: %d models, %d coding, %d total_cost, max coding=%.1f",
+		len(models), withCoding, withCost, maxCoding)
 }
