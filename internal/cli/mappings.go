@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/vegerot/coding-model-router/internal/benchmark_provider"
 	"github.com/vegerot/coding-model-router/internal/mapping"
 	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
@@ -21,16 +22,18 @@ func Mappings(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	var (
 		asJSON                   = fs.Bool("json", false, "emit mapping diagnostics as JSON instead of a table")
-		refresh                  = fs.Bool("refresh", false, "refresh the snapshot and OpenRouter catalog from live APIs")
+		refresh                  = fs.Bool("refresh", false, "refresh the snapshot and any required OpenRouter catalog from live APIs")
 		cachePath                = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
+		benchmarkProvider        = fs.String("benchmark-provider", benchmark_provider.AAName, "benchmark provider: aa or openrouter")
 		artificialAnalysisApiKey = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		openRouterAPIKey         = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
 		openRouterPath           = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	s, report, code := loadMappingReport(*cachePath, *openRouterPath, *refresh, *artificialAnalysisApiKey, stderr)
+	s, report, code := loadMappingReport(*cachePath, *openRouterPath, *refresh, *benchmarkProvider, *artificialAnalysisApiKey, *openRouterAPIKey, stderr)
 	if s == nil {
 		return code
 	}
@@ -80,10 +83,17 @@ func renderMappings(w io.Writer, s *snapshot.Snapshot, report mapping.Report) {
 		tw.Flush()
 	}
 
-	fmt.Fprintf(w, "\n%d/%d mapped (%.1f%%) · %d unmapped · %d ambiguous · OpenRouter catalog fetched %s · snapshot fetched %s\n",
-		report.Summary.Mapped, report.Summary.Total, report.Summary.MappedPercent,
-		report.Summary.Unmapped, report.Summary.Ambiguous,
-		report.CatalogFetchedAt.Format(time.RFC3339), s.FetchedAt.Format(time.RFC3339))
+	if report.CatalogFetchedAt.IsZero() {
+		fmt.Fprintf(w, "\n%d/%d mapped (%.1f%%) · %d unmapped · %d ambiguous · OpenRouter benchmark snapshot · snapshot fetched %s\n",
+			report.Summary.Mapped, report.Summary.Total, report.Summary.MappedPercent,
+			report.Summary.Unmapped, report.Summary.Ambiguous,
+			s.FetchedAt.Format(time.RFC3339))
+	} else {
+		fmt.Fprintf(w, "\n%d/%d mapped (%.1f%%) · %d unmapped · %d ambiguous · OpenRouter catalog fetched %s · snapshot fetched %s\n",
+			report.Summary.Mapped, report.Summary.Total, report.Summary.MappedPercent,
+			report.Summary.Unmapped, report.Summary.Ambiguous,
+			report.CatalogFetchedAt.Format(time.RFC3339), s.FetchedAt.Format(time.RFC3339))
+	}
 	fmt.Fprintln(w, s.Attribution)
 }
 
@@ -106,29 +116,53 @@ func topUnmapped(report mapping.Report, limit int) []mapping.Result {
 	return rows
 }
 
-func loadMappedSnapshot(cachePath, openRouterPath string, doRefresh bool, artificialAnalysisApiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
-	s, report, code := loadMappingReport(cachePath, openRouterPath, doRefresh, artificialAnalysisApiKey, stderr)
+func loadMappedSnapshot(cachePath, openRouterPath string, doRefresh bool, benchmarkProvider, artificialAnalysisApiKey, openRouterAPIKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
+	s, report, code := loadMappingReport(cachePath, openRouterPath, doRefresh, benchmarkProvider, artificialAnalysisApiKey, openRouterAPIKey, stderr)
 	if s == nil {
 		return nil, mapping.Report{}, code
+	}
+	if s.Sources.Provider == benchmark_provider.OpenRouterBenchmarksName {
+		return s, mapping.Report{}, code
 	}
 	return mapping.MappedSnapshot(s, report), report, code
 }
 
-func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, artificialAnalysisApiKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
+func loadMappingReport(cachePath, openRouterPath string, doRefresh bool, benchmarkProvider, artificialAnalysisApiKey, openRouterAPIKey string, stderr io.Writer) (*snapshot.Snapshot, mapping.Report, int) {
 	path, err := resolveSnapshotPath(cachePath)
 	if err != nil {
 		fmt.Fprintf(stderr, "router: %v\n", err)
 		return nil, mapping.Report{}, 1
 	}
+	s, code := load(path, doRefresh, benchmarkProvider, artificialAnalysisApiKey, openRouterAPIKey, stderr)
+	if s == nil {
+		return nil, mapping.Report{}, code
+	}
+	if s.Sources.Provider == benchmark_provider.OpenRouterBenchmarksName {
+		report := mapping.Report{
+			SnapshotFetchedAt: s.FetchedAt,
+			CatalogSource:     benchmark_provider.OpenRouterBenchmarksName,
+			Results:           make([]mapping.Result, 0, len(s.Candidates)),
+			Summary: mapping.Summary{
+				Total:         len(s.Candidates),
+				Mapped:        len(s.Candidates),
+				MappedPercent: 100,
+			},
+		}
+		for _, c := range s.Candidates {
+			report.Results = append(report.Results, mapping.Result{
+				Candidate:      c,
+				Status:         mapping.StatusMapped,
+				OpenRouterID:   c.OpenRouterID,
+				OpenRouterName: c.Name,
+				Reason:         "candidate supplied by OpenRouter benchmarks",
+			})
+		}
+		return s, report, code
+	}
 	catalogPath, err := resolveOpenRouterCatalogPath(openRouterPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "router: %v\n", err)
 		return nil, mapping.Report{}, 1
-	}
-
-	s, code := load(path, doRefresh, artificialAnalysisApiKey, stderr)
-	if s == nil {
-		return nil, mapping.Report{}, code
 	}
 	catalog, catalogCode := loadOpenRouterCatalog(catalogPath, doRefresh, stderr)
 	if catalog == nil {

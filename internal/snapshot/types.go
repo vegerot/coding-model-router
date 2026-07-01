@@ -14,6 +14,13 @@ const SchemaVersion = 3
 const Attribution = "Quality data: Artificial Analysis " +
 	"(https://artificialanalysis.ai). Used under their terms; attribution required."
 
+// OpenRouterAttribution is used for snapshots built from OpenRouter's benchmark
+// endpoint, which republishes Artificial Analysis scores alongside OpenRouter
+// model IDs and pricing.
+const OpenRouterAttribution = "Quality data: Artificial Analysis " +
+	"(https://artificialanalysis.ai) via OpenRouter (https://openrouter.ai). " +
+	"Pricing and model IDs: OpenRouter."
+
 // Snapshot is the full, validated set of routing candidates plus provenance.
 type Snapshot struct {
 	SchemaVersion int          `json:"schemaVersion"`

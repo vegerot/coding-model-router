@@ -137,6 +137,28 @@ func TestSnapshotAcceptsAAAPIKeyFlag(t *testing.T) {
 	}
 }
 
+func TestSnapshotAcceptsOpenRouterProviderFlags(t *testing.T) {
+	t.Setenv("AA_API_KEY", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
+	path := filepath.Join(t.TempDir(), "absent.json")
+
+	var out, errOut bytes.Buffer
+	code := cli.Snapshot([]string{
+		"--benchmark-provider", "openrouter",
+		"--openrouter-api-key", "",
+		"--cache", path,
+	}, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (no cache + no OpenRouter key)", code)
+	}
+	if strings.Contains(errOut.String(), "flag provided but not defined") {
+		t.Fatalf("snapshot rejected OpenRouter flags: %s", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "OPENROUTER_API_KEY") {
+		t.Fatalf("stderr = %q, want OpenRouter key guidance", errOut.String())
+	}
+}
+
 func TestSnapshotNormColumn(t *testing.T) {
 	t.Setenv("AA_API_KEY", "")
 	path := filepath.Join(t.TempDir(), "snapshot.json")

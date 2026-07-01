@@ -40,11 +40,12 @@ three coarse quality tiers. This project improves on it three ways:
   accepts the knob via model name (`pareto@0.7`) and/or header, rewrites the
   model field, forwards to OpenRouter with SSE streaming passthrough.
 - **Stack — Go.** Single static binary, long-running local daemon, stdlib only.
-- **Data source — Artificial Analysis Data API (free tier), via a pluggable
-  provider interface.** See below. The earlier plan to scrape AA's coding-agents
-  leaderboard page (a Next.js RSC payload) and join models.dev pricing was
-  dropped: it was fragile and unnecessary. The AA Data API returns coding
-  quality, full pricing, and a measured eval cost in clean paginated JSON.
+- **Data sources — selectable benchmark providers.** The default provider remains
+  Artificial Analysis Data API for continuity. OpenRouter's benchmark API is also
+  supported via `--benchmark-provider openrouter`; it republishes Artificial
+  Analysis coding/agentic/intelligence indices with routable OpenRouter model IDs
+  and OpenRouter pricing. Snapshots use exactly one provider at a time; mixed
+  provider snapshots are intentionally out of scope so `p` semantics stay stable.
 - **Quality metric — `artificial_analysis_coding_index`** (model-level coding
   score, 0–100). We route to a *raw* model, so the model-level coding index is
   the right signal (the harness-aware "Coding Agent Index" is not exposed by the
@@ -75,7 +76,7 @@ client (aider / Claude Code / curl)
 │   transport-level retry; Retry-After honored │
 │ data refresher (background, daily):          │
 │   • BenchmarkProvider.Fetch() → []Model      │
-│     (default: Artificial Analysis Data API)  │
+│     (default: Artificial Analysis; optional OpenRouter benchmarks) │
 │   • disk-cached snapshot; stale data is OK   │
 └──────────────┬───────────────────────────────┘
                ▼ forwards with rewritten model
@@ -87,7 +88,7 @@ client (aider / Claude Code / curl)
 ```
 cmd/router/            CLI: subcommand dispatch + `snapshot` (M1), `select` (M2), `mappings` (M3)
 internal/benchmark_provider/     BenchmarkProvider interface + provider-agnostic Model record
-internal/benchmark_provider/aa/  Artificial Analysis Data API provider (default)
+internal/benchmark_provider/     Artificial Analysis provider (default) + OpenRouter benchmark provider
 internal/snapshot/     Snapshot/Candidate types, NormalizedQuality + CostScores, store
 internal/refresh/      pure Build (Model→Snapshot), validation, Refresh orchestrator
 internal/engine/       (M2) pure Select(snapshot, p, opts) → routing plan
@@ -132,11 +133,12 @@ interface. Aider is the most likely second provider: its
 `polyglot_leaderboard.yml` carries `pass_rate_2` (quality), `total_cost` (USD),
 and `prompt_tokens`/`completion_tokens`, under Apache-2.0.
 
-### Artificial Analysis provider (`internal/benchmark_provider/aa`)
+### Artificial Analysis provider (`internal/benchmark_provider`)
 
 - Endpoint: `GET https://artificialanalysis.ai/api/v2/language/models/free`,
   header `x-api-key: $AA_API_KEY`. Paginated (`page` query param, 200/page,
-  ~3 pages ≈ 500 models). Free tier: **25 requests/day** — a refresh costs ~3.
+  ~3 pages ≈ 500 models). Free tier is currently documented as 100 requests/day
+  — a refresh costs ~3.
 - Per-model free-tier fields we consume: `slug`, `name`, `model_creator.name`,
   `release_date`, `evaluations.{artificial_analysis_coding_index,
   artificial_analysis_agentic_index, artificial_analysis_intelligence_index}`,
@@ -150,16 +152,28 @@ and `prompt_tokens`/`completion_tokens`, under Apache-2.0.
 - The API key is read from `$AA_API_KEY` (or `--aa-api-key`); it is never logged or
   committed (`.gitignore`d).
 
+### OpenRouter benchmark provider (`internal/benchmark_provider`)
+
+- Endpoint: `GET https://openrouter.ai/api/v1/benchmarks?source=artificial-analysis&task_type=coding`,
+  header `Authorization: Bearer $OPENROUTER_API_KEY`.
+- Fields consumed: `model_permaslug` (used as both snapshot slug and routable
+  OpenRouter ID), `display_name`, `intelligence_index`, `coding_index`,
+  `agentic_index`, and `pricing.{prompt,completion}`.
+- Pricing is returned as dollars/token and converted to dollars/1M tokens before
+  `BlendedPricePer1M = (3·input + output)/4` is computed.
+- OpenRouter snapshots skip AA→OpenRouter catalog mapping because every
+  candidate is already routable.
+
 ## Data layer (M1)
 
 ### Build pipeline (pure)
 
 `Build(models []provider.Model, fetchedAt) → (Snapshot, warnings, error)`:
-keep models that have a coding index **≥ 20.0** and input price **and** output
-price (others → `Dropped` with a reason) → compute
-`BlendedPricePer1M = (3·input + output)/4` → fill `Candidate` → sort by
-`BlendedPricePer1M`. Normalized quality is computed by the `snapshot` helper at
-use time, not stored.
+keep models that have a coding index **≥ 20.0** (and, for OpenRouter benchmark
+snapshots, a routable OpenRouter ID plus input/output prices; others → `Dropped`
+with a reason) → compute `BlendedPricePer1M = (3·input + output)/4` when prices
+are present → fill `Candidate` → sort by descending quality. Normalized quality
+is computed by the `snapshot` helper at use time, not stored.
 
 `Candidate` (stored): `Slug, OpenRouterID, Name, Creator, ReleaseDate`,
 `Quality` (coding index), `AgenticIndex`, `IntelligenceIndex`,
@@ -200,7 +214,7 @@ error.
   fallbacks with AA attribution. The data layer filters out models below coding
   index `20.0` before normalization and bumps the snapshot schema to reject stale
   pre-filter caches.
-- **M3 — dynamic OpenRouter mapping.** `internal/mapping` persists a local
+- **M3 — dynamic OpenRouter mapping for AA snapshots.** `internal/mapping` persists a local
   OpenRouter catalog cache at
   `os.UserCacheDir()/coding-model-router/openrouter-models.json`, fetches
   `GET https://openrouter.ai/api/v1/models` on demand, and resolves AA
@@ -209,7 +223,8 @@ error.
   quality, and JSON diagnostics. `router select` resolves the snapshot first,
   drops unresolved/ambiguous candidates unless `--show-unmapped-openrouter-models`
   is set, sets `Candidate.OpenRouterID` on mapped candidates, and then calls the
-  same pure M2 engine.
+  same pure M2 engine. OpenRouter benchmark snapshots already contain routable
+  IDs and prices, so `select`, `serve`, and `mappings` skip catalog resolution.
 
 ## Future milestones (designed; not yet built)
 
@@ -262,8 +277,9 @@ error.
 
 ## Risks
 
-- **AA API key dependency** — refresh needs a valid `$AA_API_KEY`; free tier is
-  25 req/day. Mitigated by the cached last-good snapshot and stale-OK refresh.
+- **Provider API key dependency** — AA refresh needs `$AA_API_KEY`; OpenRouter
+  benchmark refresh needs `$OPENROUTER_API_KEY`. Mitigated by the cached
+  last-good snapshot and stale-OK refresh.
 - **Free-tier field gaps** — some models lack a coding index, pricing, or
   total_cost; they are dropped (with a reason) and the ≥30-candidate floor is the
   backstop.

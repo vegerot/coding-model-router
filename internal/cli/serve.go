@@ -11,18 +11,19 @@ import (
 	"github.com/vegerot/coding-model-router/internal/proxy"
 )
 
-// Serve implements `router serve`: load the cached/refreshed snapshot and
-// OpenRouter catalog, resolve to the mapped candidate set, and run an
-// OpenAI-compatible HTTP proxy that routes pareto@p requests to OpenRouter.
+// Serve implements `router serve`: load the cached/refreshed snapshot, resolve
+// to the routable candidate set, and run an OpenAI-compatible HTTP proxy that
+// routes pareto@p requests to OpenRouter.
 func Serve(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
 		addr                     = fs.String("addr", "127.0.0.1:4000", "listen address")
 		p                        = fs.Float64("p", 0.67, "default quality floor for a bare `pareto` model name")
-		doRefresh                = fs.Bool("refresh", false, "refresh both snapshot and OpenRouter catalog caches")
+		doRefresh                = fs.Bool("refresh", false, "refresh the snapshot and any required OpenRouter catalog cache")
 		cachePath                = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
-		artificialAnalysisApyKey = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		benchmarkProvider        = fs.String("benchmark-provider", "aa", "benchmark provider: aa or openrouter")
+		artificialAnalysisAPIKey = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
 		openRouterKey            = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
 		openRouterPath           = fs.String("openrouter-cache", "", "OpenRouter catalog cache path (default: per-user cache dir)")
 	)
@@ -30,7 +31,7 @@ func Serve(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	mapped, _, code := loadMappedSnapshot(*cachePath, *openRouterPath, *doRefresh, *artificialAnalysisApyKey, stderr)
+	mapped, _, code := loadMappedSnapshot(*cachePath, *openRouterPath, *doRefresh, *benchmarkProvider, *artificialAnalysisAPIKey, *openRouterKey, stderr)
 	if mapped == nil {
 		return code
 	}

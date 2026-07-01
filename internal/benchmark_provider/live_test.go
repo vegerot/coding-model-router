@@ -78,3 +78,52 @@ func TestLiveAAShape(t *testing.T) {
 	t.Logf("live ArtificialAnalysis: %d models, %d coding, %d total_cost, max coding=%.1f",
 		len(models), withCoding, withCost, maxCoding)
 }
+
+func TestLiveOpenRouterBenchmarksShape(t *testing.T) {
+	key := os.Getenv("OPENROUTER_API_KEY")
+	if key == "" {
+		t.Skip("OPENROUTER_API_KEY not set; skipping live OpenRouter benchmarks shape test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	models, err := benchmark_provider.NewOpenRouterBenchmarks(key).Fetch(ctx, nil)
+	if err != nil {
+		t.Fatalf("live OpenRouter benchmarks fetch failed: %v", err)
+	}
+	if len(models) < 30 {
+		t.Fatalf("expected >=30 models from live OpenRouter benchmarks, got %d", len(models))
+	}
+
+	var withCoding, withPricing, withID int
+	var maxCoding float64
+	for _, m := range models {
+		if m.Slug == "" {
+			t.Error("live OpenRouter model has empty slug")
+		}
+		if m.OpenRouterID != "" {
+			withID++
+		}
+		if m.CodingIndex != nil {
+			withCoding++
+			if *m.CodingIndex > maxCoding {
+				maxCoding = *m.CodingIndex
+			}
+			if *m.CodingIndex < 0 || *m.CodingIndex > 100 {
+				t.Errorf("coding index for %s out of 0–100 band: %v", m.Slug, *m.CodingIndex)
+			}
+		}
+		if m.InputPricePer1M != nil && m.OutputPricePer1M != nil {
+			withPricing++
+		}
+	}
+	if withID < 30 || withCoding < 30 || withPricing < 30 {
+		t.Errorf("expected >=30 IDs/coding/pricing, got ids=%d coding=%d pricing=%d", withID, withCoding, withPricing)
+	}
+	if maxCoding < 20 {
+		t.Errorf("max coding index %.1f < 20 — possible scale/units change", maxCoding)
+	}
+	t.Logf("live OpenRouter benchmarks: %d models, %d coding, %d pricing, max coding=%.1f",
+		len(models), withCoding, withPricing, maxCoding)
+}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/vegerot/coding-model-router/internal/cli"
 	"github.com/vegerot/coding-model-router/internal/mapping"
+	"github.com/vegerot/coding-model-router/internal/snapshot"
 )
 
 func TestMappingsPrintsDiagnosticsFromCache(t *testing.T) {
@@ -149,6 +150,82 @@ func TestSelectShowsUnmappedOpenRouterModels(t *testing.T) {
 	}
 	if decoded.Mappings != nil {
 		t.Fatalf("mappings summary = %+v, want nil when showing unmapped", decoded.Mappings)
+	}
+}
+
+func TestSelectOpenRouterSnapshotDoesNotNeedCatalog(t *testing.T) {
+	t.Setenv("AA_API_KEY", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
+	snapshotPath := filepath.Join(t.TempDir(), "snapshot.json")
+	s := seedSnapshot(t, snapshotPath)
+	s.Sources.Provider = "openrouter"
+	s.Attribution = "Quality data: Artificial Analysis via OpenRouter."
+	for i := range s.Candidates {
+		s.Candidates[i].OpenRouterID = "test/" + s.Candidates[i].Slug
+		s.Candidates[i].Provider = "openrouter"
+	}
+	if err := snapshot.Save(snapshotPath, s); err != nil {
+		t.Fatalf("save openrouter snapshot: %v", err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := cli.Select([]string{
+		"--cache", snapshotPath,
+		"--openrouter-cache", filepath.Join(t.TempDir(), "absent-catalog.json"),
+		"--p", "1",
+		"--json",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, errOut.String())
+	}
+	var decoded struct {
+		Plan struct {
+			Primary struct {
+				Slug         string `json:"slug"`
+				OpenRouterID string `json:"openRouterId"`
+			} `json:"primary"`
+		} `json:"plan"`
+		Mappings *mapping.Summary `json:"mappings"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("--json output is not valid JSON: %v", err)
+	}
+	if decoded.Plan.Primary.Slug != "pricey-top" || decoded.Plan.Primary.OpenRouterID != "test/pricey-top" {
+		t.Fatalf("primary = %+v, want openrouter pricey-top", decoded.Plan.Primary)
+	}
+	if decoded.Mappings != nil {
+		t.Fatalf("mappings summary = %+v, want nil for OpenRouter snapshots", decoded.Mappings)
+	}
+}
+
+func TestMappingsOpenRouterSnapshotReportsAlreadyMappedRows(t *testing.T) {
+	t.Setenv("AA_API_KEY", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
+	snapshotPath := filepath.Join(t.TempDir(), "snapshot.json")
+	s := seedSnapshot(t, snapshotPath)
+	s.Sources.Provider = "openrouter"
+	s.Attribution = "Quality data: Artificial Analysis via OpenRouter."
+	for i := range s.Candidates {
+		s.Candidates[i].OpenRouterID = "test/" + s.Candidates[i].Slug
+		s.Candidates[i].Provider = "openrouter"
+	}
+	if err := snapshot.Save(snapshotPath, s); err != nil {
+		t.Fatalf("save openrouter snapshot: %v", err)
+	}
+
+	var out, errOut bytes.Buffer
+	code := cli.Mappings([]string{
+		"--cache", snapshotPath,
+		"--openrouter-cache", filepath.Join(t.TempDir(), "absent-catalog.json"),
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %s)", code, errOut.String())
+	}
+	got := out.String()
+	for _, want := range []string{"cheap-low", "test/cheap-low", "mapped", "3/3 mapped"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("mappings output missing %q\n---\n%s", want, got)
+		}
 	}
 }
 

@@ -131,6 +131,51 @@ func TestBuildDropsModelsBelowMinimumCodingIndex(t *testing.T) {
 	}
 }
 
+func TestBuildCarriesOpenRouterPricingAndDropsUnpricedRows(t *testing.T) {
+	models := []benchmark_provider.Model{
+		validModel("priced", 50, 5, 30),
+		{Slug: "missing-input", Name: "missing-input", CodingIndex: ptr(40), OutputPricePer1M: ptr(1), OpenRouterID: "test/missing-input"},
+		{Slug: "missing-output", Name: "missing-output", CodingIndex: ptr(40), InputPricePer1M: ptr(1), OpenRouterID: "test/missing-output"},
+		validModel("zero-priced", 45, 0, 0),
+	}
+	for i := range models {
+		models[i].OpenRouterID = "test/" + models[i].Slug
+	}
+
+	s := refresh.Build(models, benchmark_provider.OpenRouterBenchmarksName, at())
+
+	if len(s.Candidates) != 1 {
+		t.Fatalf("candidate count = %d, want 1 (%+v)", len(s.Candidates), s.Candidates)
+	}
+	c := s.Candidates[0]
+	if c.Slug != "priced" || c.OpenRouterID != "test/priced" {
+		t.Fatalf("candidate identity = %+v", c)
+	}
+	if c.InputPricePer1M != 5 || c.OutputPricePer1M != 30 {
+		t.Fatalf("prices = in %g out %g, want 5/30", c.InputPricePer1M, c.OutputPricePer1M)
+	}
+	if c.BlendedPricePer1M != 11.25 {
+		t.Fatalf("blended price = %g, want 11.25", c.BlendedPricePer1M)
+	}
+	if len(s.Dropped) != 3 {
+		t.Fatalf("dropped count = %d, want 3 (%+v)", len(s.Dropped), s.Dropped)
+	}
+	var missing, nonPositive int
+	for _, d := range s.Dropped {
+		switch {
+		case strings.Contains(d.Reason, "missing OpenRouter pricing"):
+			missing++
+		case strings.Contains(d.Reason, "non-positive OpenRouter pricing"):
+			nonPositive++
+		default:
+			t.Fatalf("unexpected dropped reason: %+v", d)
+		}
+	}
+	if missing != 2 || nonPositive != 1 {
+		t.Fatalf("dropped reasons: missing=%d nonPositive=%d, want 2/1 (%+v)", missing, nonPositive, s.Dropped)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	t.Run("healthy snapshot passes", func(t *testing.T) {
 		s := refresh.Build(manyValid(60), "p", at())

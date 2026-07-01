@@ -27,8 +27,8 @@ const (
 
 // ArtificialAnalysis implements Provider against the Artificial Analysis Data API free tier. The
 // free endpoint returns model identity, the coding/agentic/intelligence indices,
-// full per-token pricing, and a measured eval cost — everything the data layer
-// needs, in clean paginated JSON. Construct with NewAA; the zero value is unusable.
+// and a measured eval cost in clean paginated JSON. Construct with NewAA; the
+// zero value is unusable.
 type ArtificialAnalysis struct {
 	apiKey  string
 	baseURL string

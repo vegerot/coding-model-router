@@ -1,8 +1,8 @@
 // Command router is a Pareto-style coding-model router.
 //
-// It exposes a single quality knob p ∈ [0,1] and, given Artificial Analysis's
-// coding index plus blended per-token pricing, selects the cheapest model whose
-// normalized quality is at or above p.
+// It exposes a single quality knob p ∈ [0,1] and, given a benchmark provider's
+// coding index plus OpenRouter-compatible blended per-token pricing, selects the
+// cheapest model whose normalized quality is at or above p.
 //
 // Subcommands:
 //
@@ -53,16 +53,20 @@ func usage(w io.Writer) {
 
 Usage:
   router snapshot [--refresh] [--json] [--cache PATH]
+                  [--benchmark-provider aa|openrouter]
       Build or display the candidate model snapshot (quality + blended cost).
 
   router select [--p P] [--refresh] [--json] [--cache PATH]
+                [--benchmark-provider aa|openrouter]
                 [--show-unmapped-openrouter-models]
       Select the cheapest model at or above quality floor P.
 
   router mappings [--refresh] [--json] [--cache PATH] [--openrouter-cache PATH]
+                  [--benchmark-provider aa|openrouter]
       Resolve snapshot candidates to OpenRouter model IDs.
 
   router serve [--addr ADDR] [--p P] [--refresh] [--cache PATH]
+               [--benchmark-provider aa|openrouter]
                [--openrouter-cache PATH] [--openrouter-api-key KEY] [--aa-api-key KEY]
       Run the OpenAI-compatible proxy. POST /v1/chat/completions with
       model "pareto" or "pareto@P" (or an X-Pareto-P header) to route to the
@@ -71,6 +75,6 @@ Usage:
   router help
       Show this help.
 
-Data: Artificial Analysis (https://artificialanalysis.ai).
+Default data: Artificial Analysis (https://artificialanalysis.ai). Optional data: OpenRouter benchmarks.
 	`)
 }

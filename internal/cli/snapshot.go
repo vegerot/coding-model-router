@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -24,9 +25,9 @@ import (
 //	1  no data (fetch failed and no cached snapshot to fall back to), or a usage error
 //	2  served a stale cached snapshot because a requested refresh failed
 //
-// Behavior: with a cached snapshot present and no --refresh, it prints from cache
-// (no network). Otherwise it fetches via the Artificial Analysis provider, caches
-// the result, and prints it.
+// Behavior: with a cached snapshot present and no --refresh, it prints from
+// cache (no network). Otherwise it fetches via the selected benchmark provider,
+// caches the result, and prints it.
 func Snapshot(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("snapshot", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -34,7 +35,9 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 		doRefresh                = fs.Bool("refresh", false, "force a re-fetch even if a cached snapshot exists")
 		asJSON                   = fs.Bool("json", false, "emit the raw snapshot JSON instead of a table")
 		cachePath                = fs.String("cache", "", "snapshot cache path (default: per-user cache dir)")
+		benchmarkProvider        = fs.String("benchmark-provider", benchmark_provider.AAName, "benchmark provider: aa or openrouter")
 		artificialAnalysisApiKey = fs.String("aa-api-key", "", "Artificial Analysis API key (default: $AA_API_KEY)")
+		openRouterAPIKey         = fs.String("openrouter-api-key", "", "OpenRouter API key (default: $OPENROUTER_API_KEY)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -50,7 +53,7 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 		path = p
 	}
 
-	s, code := load(path, *doRefresh, *artificialAnalysisApiKey, stderr)
+	s, code := load(path, *doRefresh, *benchmarkProvider, *artificialAnalysisApiKey, *openRouterAPIKey, stderr)
 	if s == nil {
 		return code
 	}
@@ -72,7 +75,7 @@ func Snapshot(args []string, stdout, stderr io.Writer) int {
 // load returns the snapshot to display plus the exit code. A nil snapshot means
 // fatal (code is 1). When a refresh fails but a cached snapshot is served, stale
 // is true and code is 2.
-func load(path string, doRefresh bool, artificialAnalysisApiKey string, stderr io.Writer) (s *snapshot.Snapshot, code int) {
+func load(path string, doRefresh bool, providerName, artificialAnalysisApiKey, openRouterAPIKey string, stderr io.Writer) (s *snapshot.Snapshot, code int) {
 	// Fast path: print from cache without touching the network.
 	if !doRefresh {
 		if cached, err := snapshot.Load(path); err == nil {
@@ -81,16 +84,17 @@ func load(path string, doRefresh bool, artificialAnalysisApiKey string, stderr i
 		// No usable cache → fall through and fetch.
 	}
 
-	key := artificialAnalysisApiKey
-	if key == "" {
-		key = os.Getenv("AA_API_KEY")
+	provider, err := selectedProvider(providerName, artificialAnalysisApiKey, openRouterAPIKey)
+	if err != nil {
+		fmt.Fprintf(stderr, "router: %v\n", err)
+		return nil, 1
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	fresh, wasStale, err := refresh.Refresh(ctx, refresh.Options{
-		Provider:  benchmark_provider.NewAA(key),
+		Provider:  provider,
 		CachePath: path,
 		Stderr:    stderr,
 	})
@@ -103,6 +107,25 @@ func load(path string, doRefresh bool, artificialAnalysisApiKey string, stderr i
 		return nil, 1
 	}
 	return fresh, 0
+}
+
+func selectedProvider(providerName, artificialAnalysisAPIKey, openRouterAPIKey string) (benchmark_provider.BenchmarkProvider, error) {
+	switch strings.ToLower(strings.TrimSpace(providerName)) {
+	case "", "aa", benchmark_provider.AAName:
+		key := artificialAnalysisAPIKey
+		if key == "" {
+			key = os.Getenv("AA_API_KEY")
+		}
+		return benchmark_provider.NewAA(key), nil
+	case benchmark_provider.OpenRouterBenchmarksName:
+		key := openRouterAPIKey
+		if key == "" {
+			key = os.Getenv("OPENROUTER_API_KEY")
+		}
+		return benchmark_provider.NewOpenRouterBenchmarks(key), nil
+	default:
+		return nil, fmt.Errorf("unknown benchmark provider %q (want aa or openrouter)", providerName)
+	}
 }
 
 func renderTable(w io.Writer, s *snapshot.Snapshot) {

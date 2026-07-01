@@ -23,16 +23,16 @@ func Build(models []benchmark_provider.Model, providerName string, fetchedAt tim
 	s := &snapshot.Snapshot{
 		SchemaVersion: snapshot.SchemaVersion,
 		FetchedAt:     fetchedAt,
-		Attribution:   snapshot.Attribution,
+		Attribution:   attributionForProvider(providerName),
 		Sources:       snapshot.SourceMeta{Provider: providerName, ModelCount: len(models)},
 	}
 
 	for _, m := range models {
-		if reason := dropReason(m); reason != "" {
+		if reason := dropReason(m, providerName); reason != "" {
 			s.Dropped = append(s.Dropped, snapshot.DroppedRow{Slug: m.Slug, Reason: reason})
 			continue
 		}
-		s.Candidates = append(s.Candidates, snapshot.Candidate{
+		c := snapshot.Candidate{
 			Slug:              m.Slug,
 			OpenRouterID:      m.OpenRouterID,
 			Name:              m.Name,
@@ -43,7 +43,16 @@ func Build(models []benchmark_provider.Model, providerName string, fetchedAt tim
 			IntelligenceIndex: deref(m.IntelligenceIndex),
 			EvalTotalCostUSD:  deref(m.EvalTotalCostUSD),
 			Provider:          providerName,
-		})
+		}
+		if m.InputPricePer1M != nil && m.OutputPricePer1M != nil {
+			c.InputPricePer1M = *m.InputPricePer1M
+			c.OutputPricePer1M = *m.OutputPricePer1M
+			c.BlendedPricePer1M = (3*c.InputPricePer1M + c.OutputPricePer1M) / 4
+		}
+		if m.CacheHitPricePer1M != nil {
+			c.CacheHitPricePer1M = *m.CacheHitPricePer1M
+		}
+		s.Candidates = append(s.Candidates, c)
 	}
 
 	sort.SliceStable(s.Candidates, func(i, j int) bool {
@@ -56,8 +65,15 @@ func Build(models []benchmark_provider.Model, providerName string, fetchedAt tim
 	return s
 }
 
+func attributionForProvider(providerName string) string {
+	if providerName == benchmark_provider.OpenRouterBenchmarksName {
+		return snapshot.OpenRouterAttribution
+	}
+	return snapshot.Attribution
+}
+
 // dropReason returns why a model cannot become a candidate, or "" if it can.
-func dropReason(m benchmark_provider.Model) string {
+func dropReason(m benchmark_provider.Model, providerName string) string {
 	switch {
 	case m.Slug == "":
 		return "empty slug"
@@ -65,6 +81,12 @@ func dropReason(m benchmark_provider.Model) string {
 		return "missing coding index"
 	case *m.CodingIndex < minCandidateCodingIndex:
 		return fmt.Sprintf("coding index below minimum: %.1f < %.0f", *m.CodingIndex, minCandidateCodingIndex)
+	case providerName == benchmark_provider.OpenRouterBenchmarksName && m.OpenRouterID == "":
+		return "missing OpenRouter model ID"
+	case providerName == benchmark_provider.OpenRouterBenchmarksName && (m.InputPricePer1M == nil || m.OutputPricePer1M == nil):
+		return "missing OpenRouter pricing"
+	case providerName == benchmark_provider.OpenRouterBenchmarksName && (*m.InputPricePer1M <= 0 || *m.OutputPricePer1M <= 0):
+		return "non-positive OpenRouter pricing"
 	}
 	return ""
 }
